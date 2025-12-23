@@ -11,6 +11,9 @@ export default defineNuxtConfig({
     authSecret: process.env.AUTH_SECRET,
   },
   nitro: {
+    experimental: {
+      wasm: true,
+    },
     alias: {
       "pg-native": fileURLToPath(
         new URL("./mock-pg-native.mjs", import.meta.url)
