@@ -1,20 +1,11 @@
-// server/utils/prisma.ts
-import { PrismaClient } from "../../app/generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
+import { PrismaClient } from "@prisma/client/edge";
+import { withAccelerate } from "@prisma/extension-accelerate";
 
-const connectionString = process.env.DATABASE_URL;
+const createPrismaClient = () => new PrismaClient().$extends(withAccelerate());
+type PrismaClientWithAccelerate = ReturnType<typeof createPrismaClient>;
 
-// Setup Adapter (Jalan di Local & Prod)
-const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClientWithAccelerate };
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-
-export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    adapter,
-  });
+export const prisma = globalForPrisma.prisma || createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
