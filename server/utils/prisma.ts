@@ -5,17 +5,21 @@ import { Pool } from "pg";
 
 const connectionString = process.env.DATABASE_URL;
 
-const pool = new Pool({ connectionString });
+let _prisma: PrismaClient;
 
-const adapter = new PrismaPg(pool);
-const globalForPrisma = globalThis as unknown as {
-  prisma?: PrismaClient;
-};
+if (process.env.NODE_ENV === "production") {
+  // ☁️ CLOUDFLARE MODE (Production)
+  // Gunakan Adapter agar jalan di Edge/Serverless
+  const pool = new Pool({ connectionString });
+  const adapter = new PrismaPg(pool);
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter, 
-  });
+  _prisma = new PrismaClient({ adapter });
+} else {
+  const globalForPrisma = global as unknown as { prisma: PrismaClient };
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = new PrismaClient({} as any);
+  }
+  _prisma = globalForPrisma.prisma;
+}
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export const prisma = _prisma;
