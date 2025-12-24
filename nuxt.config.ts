@@ -1,6 +1,8 @@
 // nuxt.config.ts
 import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
+const prismaGeneratedPath = resolve(__dirname, "app/generated/prisma");
 const isProduction = process.env.NODE_ENV === "production";
 
 export default defineNuxtConfig({
@@ -18,23 +20,34 @@ export default defineNuxtConfig({
   },
 
   vite: {
+    // KUNCI PERBAIKAN:
+    // Hanya paksa WASM sebagai aset saat Production (Cloudflare).
+    // Saat Local, biarkan kosong agar Vite menanganinya secara default.
     assetsInclude: isProduction ? ["**/*.wasm"] : [],
 
     optimizeDeps: {
-      exclude: ["../app/generated/prisma"],
+      exclude: [prismaGeneratedPath, "@prisma/client", "@prisma/adapter-pg"],
+    },
+
+    build: {
+      rollupOptions: {
+        external: ["pg-native"],
+      },
     },
   },
 
   nitro: {
     experimental: {
-      wasm: isProduction,
+      wasm: true,
     },
 
     moduleSideEffects: [
-      "../app/generated/prisma/query_engine_bg.postgresql.wasm",
-      "../app/generated/prisma/*.wasm",
+      resolve(prismaGeneratedPath, "query_engine_bg.postgresql.wasm"),
+      resolve(prismaGeneratedPath, "index.js"),
     ],
 
+    // Mocking pg-native hanya diperlukan saat Production (Cloudflare)
+    // Di Local, library pg asli bisa berjalan normal.
     alias: isProduction
       ? {
           "pg-native": fileURLToPath(
@@ -42,5 +55,12 @@ export default defineNuxtConfig({
           ),
         }
       : undefined,
+
+    esbuild: {
+      options: {
+        // Loader copy hanya kita aktifkan saat Production
+        loader: isProduction ? ({ ".wasm": "copy" } as any) : undefined,
+      },
+    },
   },
 });
