@@ -1,8 +1,15 @@
 // nuxt.config.ts
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import { dirname, join } from "node:path";
 
-const prismaGeneratedPath = resolve(__dirname, "app/generated/prisma");
+// 1. FIX: Definisikan __dirname secara manual karena kita pakai type: module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Arahkan ke folder generated prisma yang benar
+const prismaGeneratedPath = join(__dirname, "app/generated/prisma");
+
+// Cek environment
 const isProduction = process.env.NODE_ENV === "production";
 
 export default defineNuxtConfig({
@@ -20,20 +27,18 @@ export default defineNuxtConfig({
   },
 
   vite: {
+    // 2. Terapkan strategi Hybrid untuk assets
+    assetsInclude: isProduction ? ["**/*.wasm"] : [],
+
     optimizeDeps: {
+      // Exclude folder generated agar Vite tidak menyentuhnya
       exclude: [prismaGeneratedPath, "@prisma/client", "@prisma/adapter-pg"],
     },
 
     build: {
       rollupOptions: {
-        // KUNCI PERBAIKAN:
-        // Kita gunakan Regex untuk menandai semua file .wasm sebagai "External".
-        // Artinya: Vite dilarang mengubah, membundle, atau mengutak-atik file ini.
-        // Biarkan Cloudflare yang menanganinya secara native.
-        external: [
-          /\.wasm$/, // Semua file berakhiran .wasm dianggap external
-          "pg-native",
-        ],
+        // Kita gunakan external agar Rollup tidak mencoba mem-bundle WASM menjadi JS text
+        external: [/\.wasm$/, "pg-native"],
       },
     },
   },
@@ -43,10 +48,10 @@ export default defineNuxtConfig({
       wasm: true,
     },
 
-    // Pastikan file WASM ikut tercopy ke output folder
+    // Pastikan file ini ikut terbawa saat deploy
     moduleSideEffects: [
-      resolve(prismaGeneratedPath, "query_engine_bg.postgresql.wasm"),
-      resolve(prismaGeneratedPath, "index.js"),
+      join(prismaGeneratedPath, "query_engine_bg.postgresql.wasm"),
+      join(prismaGeneratedPath, "index.js"),
     ],
 
     alias: isProduction
@@ -59,7 +64,7 @@ export default defineNuxtConfig({
 
     esbuild: {
       options: {
-        // Paksa esbuild menyalin file wasm sebagai binary murni
+        // 3. Paksa esbuild menyalin file sebagai binary (bukan text)
         loader: {
           ".wasm": "copy",
         } as any,
