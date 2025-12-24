@@ -11,4 +11,17 @@ export default defineNuxtConfig({
   build: {
     transpile: ["@prisma/client"],
   },
+
+  nitro: {
+    experimental: {
+      wasm: true,
+    },
+    esbuild: {
+      options: {
+        loader: {
+          ".wasm": "copy",
+        } as any,
+      },
+    },
+  },
 });
