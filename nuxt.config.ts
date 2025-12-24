@@ -20,18 +20,20 @@ export default defineNuxtConfig({
   },
 
   vite: {
-    // KUNCI PERBAIKAN:
-    // Hanya paksa WASM sebagai aset saat Production (Cloudflare).
-    // Saat Local, biarkan kosong agar Vite menanganinya secara default.
-    assetsInclude: isProduction ? ["**/*.wasm"] : [],
-
     optimizeDeps: {
       exclude: [prismaGeneratedPath, "@prisma/client", "@prisma/adapter-pg"],
     },
 
     build: {
       rollupOptions: {
-        external: ["pg-native"],
+        // KUNCI PERBAIKAN:
+        // Kita gunakan Regex untuk menandai semua file .wasm sebagai "External".
+        // Artinya: Vite dilarang mengubah, membundle, atau mengutak-atik file ini.
+        // Biarkan Cloudflare yang menanganinya secara native.
+        external: [
+          /\.wasm$/, // Semua file berakhiran .wasm dianggap external
+          "pg-native",
+        ],
       },
     },
   },
@@ -41,13 +43,12 @@ export default defineNuxtConfig({
       wasm: true,
     },
 
+    // Pastikan file WASM ikut tercopy ke output folder
     moduleSideEffects: [
       resolve(prismaGeneratedPath, "query_engine_bg.postgresql.wasm"),
       resolve(prismaGeneratedPath, "index.js"),
     ],
 
-    // Mocking pg-native hanya diperlukan saat Production (Cloudflare)
-    // Di Local, library pg asli bisa berjalan normal.
     alias: isProduction
       ? {
           "pg-native": fileURLToPath(
@@ -58,8 +59,10 @@ export default defineNuxtConfig({
 
     esbuild: {
       options: {
-        // Loader copy hanya kita aktifkan saat Production
-        loader: isProduction ? ({ ".wasm": "copy" } as any) : undefined,
+        // Paksa esbuild menyalin file wasm sebagai binary murni
+        loader: {
+          ".wasm": "copy",
+        } as any,
       },
     },
   },
