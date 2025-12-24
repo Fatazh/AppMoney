@@ -1,11 +1,9 @@
 // nuxt.config.ts
-import { fileURLToPath } from "node:url"; // Gunakan import bawaan Node.js, lebih stabil
+import { fileURLToPath } from "node:url";
 
-// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
-
   modules: ["@nuxtjs/tailwindcss"],
 
   css: [
@@ -13,25 +11,30 @@ export default defineNuxtConfig({
     "~/assets/css/money-manager.css",
   ],
 
-  // Agar Vite tidak merusak file generated Prisma
+  // 1. Agar Nuxt mengenali file prisma
+  build: {
+    transpile: ["@prisma/client"],
+  },
+
+  // 2. KUNCI UTAMA: Mencegah error "Magic header" & "Found cons"
+  // Kita melarang Vite melakukan optimasi pada folder generated prisma
   vite: {
     optimizeDeps: {
-      // Ganti path ini sesuai dengan output di schema.prisma Anda
-      // Jika output anda "../app/generated/prisma", gunakan ini:
       exclude: ["../app/generated/prisma"],
     },
   },
 
   nitro: {
+    // 3. Wajib ON untuk Cloudflare Workers
     experimental: {
-      wasm: true, // Wajib ON untuk Cloudflare Workers + Prisma
+      wasm: true,
     },
 
-    // Kadang diperlukan agar Nitro tidak membuang file Prisma saat tree-shaking
+    // 4. Pastikan file WASM terbawa saat build
     moduleSideEffects: [
-      "../app/generated/prisma/index.js",
-      "../app/generated/prisma/runtime/library.js",
-      "../app/generated/prisma/runtime/wasm.js",
+      "../app/generated/prisma/query_engine_bg.postgresql.wasm", // Pastikan nama file ini sesuai (cek folder generated Anda)
+      // Atau gunakan wildcard jika ragu:
+      "../app/generated/prisma/*.wasm",
     ],
 
     alias: {
