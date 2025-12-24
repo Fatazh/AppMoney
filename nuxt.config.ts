@@ -7,9 +7,7 @@ export default defineNuxtConfig({
     "@fortawesome/fontawesome-free/css/all.css",
     "~/assets/css/money-manager.css",
   ],
-  runtimeConfig: {
-    authSecret: process.env.AUTH_SECRET,
-  },
+ 
   nitro: {
     experimental: {
       wasm: true,
