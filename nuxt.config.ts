@@ -8,11 +8,12 @@ export default defineNuxtConfig({
     "~/assets/css/money-manager.css",
   ],
 
-  build: {
-    transpile: ["@prisma/client"],
-  },
-
   nitro: {
+    externals: {
+    // Pastikan @prisma/client tidak di-bundle, tapi di-load dari node_modules
+    inline: [],
+    external: ["@prisma/client"]
+  },
     experimental: {
       wasm: true,
     },
