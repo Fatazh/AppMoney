@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "prisma generate && node scripts/prisma-link.mjs && nuxt build",
+    "build": "nuxt build",
     "start": "node .output/server/index.mjs",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
