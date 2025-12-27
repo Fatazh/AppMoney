@@ -8,4 +8,12 @@ export default defineNuxtConfig({
     "~/assets/css/money-manager.css",
   ],
 
+  nitro: {
+    esbuild: {
+      options: {
+        target: "es2022",
+      },
+    },
+  },
+
 });
