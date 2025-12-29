@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, watch } from 'vue';
 import AddTransactionModal from '~/components/money/modals/AddTransactionModal.vue';
 import WalletModal from '~/components/money/modals/WalletModal.vue';
 import CategoryModal from '~/components/money/modals/CategoryModal.vue';
@@ -20,9 +21,28 @@ const {
   showCategoryModal,
   showDeleteWalletModal,
   showDeleteCategoryModal,
+  flashMessage,
+  clearFlash,
+  bootstrapping,
 } = useMoneyManager();
 
 const isActive = (path: string) => route.path === path;
+
+let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => flashMessage.value?.id,
+  (id) => {
+    if (!id) return;
+    if (flashTimer) clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => clearFlash(), 2600);
+  },
+  { immediate: true }
+);
+
+onBeforeUnmount(() => {
+  if (flashTimer) clearTimeout(flashTimer);
+});
 </script>
 
 <template>
@@ -31,6 +51,38 @@ const isActive = (path: string) => route.path === path;
       <div
         class="flex-1 flex flex-col relative h-full overflow-hidden w-full max-w-md mx-auto md:max-w-4xl md:mx-auto bg-white md:bg-gray-50 shadow-2xl md:shadow-none"
       >
+        <div v-if="bootstrapping" class="fixed top-0 left-0 right-0 z-40">
+          <div class="mx-auto max-w-md md:max-w-4xl px-4 md:px-8 pt-3">
+            <div class="bg-white/95 border border-gray-200 rounded-2xl px-4 py-2 shadow-lg flex items-center gap-2 text-xs text-slate-600">
+              <i class="fas fa-spinner fa-spin text-lime-500"></i>
+              <span>Memuat data...</span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="flashMessage"
+          class="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md md:max-w-4xl"
+        >
+          <div
+            class="rounded-2xl px-4 py-3 border shadow-xl flex items-center gap-3"
+            :class="flashMessage.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : flashMessage.type === 'error'
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : 'bg-blue-50 border-blue-200 text-blue-700'"
+          >
+            <i
+              class="fas"
+              :class="flashMessage.type === 'success'
+                ? 'fa-check-circle'
+                : flashMessage.type === 'error'
+                  ? 'fa-exclamation-circle'
+                  : 'fa-info-circle'"
+            ></i>
+            <span class="text-sm font-semibold">{{ flashMessage.message }}</span>
+          </div>
+        </div>
         <div class="px-6 pt-10 pb-4 bg-white md:bg-gray-50 flex justify-between items-center z-10 relative md:pt-8 md:px-8">
           <div>
             <p class="text-gray-500 text-sm">Selamat Pagi,</p>

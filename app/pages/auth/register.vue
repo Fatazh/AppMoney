@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const route = useRoute();
+const name = ref("");
 const email = ref("");
 const password = ref("");
 const confirmPassword = ref("");
@@ -11,6 +12,11 @@ const message = ref<string | null>(null);
 const errorMsg = ref<string | null>(null);
 
 async function register() {
+    if (!name.value.trim()) {
+        errorMsg.value = "Nama wajib diisi";
+        return;
+    }
+
     // Validasi password match
     if (password.value !== confirmPassword.value) {
         errorMsg.value = "Password tidak cocok";
@@ -31,6 +37,7 @@ async function register() {
         await $fetch('/api/auth/register', {
             method: 'POST',
             body: {
+                name: name.value,
                 email: email.value,
                 password: password.value,
             },
@@ -71,6 +78,21 @@ async function register() {
                 <p class="text-slate-500 text-sm mb-6">Daftar untuk memulai perjalanan finansial Anda</p>
 
                 <form @submit.prevent="register">
+                    <!-- Name Input -->
+                    <div class="mb-4">
+                        <label class="block text-slate-700 text-sm font-semibold mb-2" for="name">
+                            Nama
+                        </label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <i class="fas fa-user text-slate-400"></i>
+                            </div>
+                            <input v-model="name" type="text" id="name" required
+                                class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+                                placeholder="Nama lengkap" />
+                        </div>
+                    </div>
+
                     <!-- Email Input -->
                     <div class="mb-4">
                         <label class="block text-slate-700 text-sm font-semibold mb-2" for="email">

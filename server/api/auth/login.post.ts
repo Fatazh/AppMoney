@@ -18,5 +18,5 @@ export default defineEventHandler(async (event) => {
 
   setSessionCookie(event, user.id);
 
-  return { user: { id: user.id, email: user.email } };
+  return { user: { id: user.id, email: user.email, name: user.name } };
 });

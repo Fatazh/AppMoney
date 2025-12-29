@@ -82,7 +82,10 @@ export const getUserFromEvent = async (event: any) => {
   if (!token) return null;
   const userId = verifySessionToken(token);
   if (!userId) return null;
-  return prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true },
+  });
 };
 
 export const requireUser = async (event: any) => {

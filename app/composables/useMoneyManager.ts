@@ -5,10 +5,12 @@ type WalletType = 'Cash' | 'Bank' | 'E-Wallet';
 type TransactionType = 'expense' | 'income';
 type DbWalletType = 'CASH' | 'BANK' | 'WALLET';
 type DbCategoryType = 'INCOME' | 'EXPENSE';
+type FlashType = 'success' | 'error' | 'info';
 
 interface UserInfo {
   id: string;
   email: string;
+  name?: string | null;
 }
 
 interface NotificationItem {
@@ -18,6 +20,12 @@ interface NotificationItem {
   time: string;
   type: NotificationType;
   read: boolean;
+}
+
+interface FlashMessage {
+  id: number;
+  type: FlashType;
+  message: string;
 }
 
 interface WalletItem {
@@ -162,8 +170,11 @@ export const useMoneyManager = () => {
   const currentUser = useState<UserInfo | null>('mm-user', () => null);
   const bootstrapped = useState<boolean>('mm-bootstrapped', () => false);
   const bootstrapping = useState<boolean>('mm-bootstrapping', () => false);
+  const flashMessage = useState<FlashMessage | null>('mm-flash', () => null);
 
   const displayName = computed(() => {
+    const name = currentUser.value?.name?.trim();
+    if (name) return name;
     const email = currentUser.value?.email || '';
     const [local = ''] = email.split('@');
     if (!local) return 'Dimas Pratama';
@@ -328,76 +339,96 @@ export const useMoneyManager = () => {
     }
   };
 
+  const setFlash = (message: string, type: FlashType = 'success') => {
+    flashMessage.value = { id: Date.now(), type, message };
+  };
+
+  const clearFlash = () => {
+    flashMessage.value = null;
+  };
+
   const fetchBootstrap = async () => {
     const headers = process.server ? useRequestHeaders(['cookie']) : undefined;
-    const data = await $fetch<BootstrapPayload>('/api/bootstrap', { headers });
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeout = controller ? setTimeout(() => controller.abort(), 12000) : null;
+    try {
+      const data = await $fetch<BootstrapPayload>('/api/bootstrap', {
+        headers,
+        signal: controller?.signal,
+      });
 
-    currentUser.value = data.user;
+      currentUser.value = data.user;
 
-    const categoryItems = (data.categories || []).map((cat) => ({
-      id: cat.id,
-      name: cat.name,
-      type: cat.type === 'INCOME' ? 'income' : 'expense',
-      icon: cat.icon || 'fa-tag',
-    }));
+      const categoryItems = (data.categories || []).map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        type: cat.type === 'INCOME' ? 'income' : 'expense',
+        icon: cat.icon || 'fa-tag',
+      }));
 
-    expenseCategories.value = categoryItems.filter((cat) => cat.type === 'expense');
-    incomeCategories.value = categoryItems.filter((cat) => cat.type === 'income');
+      expenseCategories.value = categoryItems.filter((cat) => cat.type === 'expense');
+      incomeCategories.value = categoryItems.filter((cat) => cat.type === 'income');
 
-    wallets.value = (data.wallets || []).map((wallet) => {
-      const uiType = walletTypeMapToUi[wallet.type] || 'Cash';
-      const meta = resolveWalletMeta(uiType);
-      return {
-        id: wallet.id,
-        name: wallet.name,
-        type: uiType,
-        balance: Number(wallet.balance || 0),
-        color: meta.color,
-        icon: meta.icon,
-      };
-    });
+      wallets.value = (data.wallets || []).map((wallet) => {
+        const uiType = walletTypeMapToUi[wallet.type] || 'Cash';
+        const meta = resolveWalletMeta(uiType);
+        return {
+          id: wallet.id,
+          name: wallet.name,
+          type: uiType,
+          balance: Number(wallet.balance || 0),
+          color: meta.color,
+          icon: meta.icon,
+        };
+      });
 
-    transactions.value = (data.transactions || []).map((tx) => {
-      const txType: TransactionType = tx.category.type === 'INCOME' ? 'income' : 'expense';
-      const title = (tx.productName || tx.category.name || '').trim() || tx.category.name;
-      const icon = tx.category.icon || resolveTransactionIcon(tx.category.name, txType);
-      return {
-        id: tx.id,
-        title,
-        category: tx.category.name,
-        categoryId: tx.category.id,
-        type: txType,
-        amount: Number(tx.amount || 0),
-        date: tx.date,
-        createdAt: tx.createdAt || tx.date,
-        icon,
-        wallet: tx.wallet?.name || '-',
-        walletId: tx.wallet?.id || null,
-        note: tx.note || null,
-        quantity: tx.quantity ?? 1,
-        pricePerUnit: tx.pricePerUnit ?? null,
-        promoType: tx.promoType ?? null,
-        promoValue: tx.promoValue ?? null,
-        promoBuyX: tx.promoBuyX ?? null,
-        promoGetY: tx.promoGetY ?? null,
-      };
-    });
+      transactions.value = (data.transactions || []).map((tx) => {
+        const txType: TransactionType = tx.category.type === 'INCOME' ? 'income' : 'expense';
+        const title = (tx.productName || tx.category.name || '').trim() || tx.category.name;
+        const icon = tx.category.icon || resolveTransactionIcon(tx.category.name, txType);
+        return {
+          id: tx.id,
+          title,
+          category: tx.category.name,
+          categoryId: tx.category.id,
+          type: txType,
+          amount: Number(tx.amount || 0),
+          date: tx.date,
+          createdAt: tx.createdAt || tx.date,
+          icon,
+          wallet: tx.wallet?.name || '-',
+          walletId: tx.wallet?.id || null,
+          note: tx.note || null,
+          quantity: tx.quantity ?? 1,
+          pricePerUnit: tx.pricePerUnit ?? null,
+          promoType: tx.promoType ?? null,
+          promoValue: tx.promoValue ?? null,
+          promoBuyX: tx.promoBuyX ?? null,
+          promoGetY: tx.promoGetY ?? null,
+        };
+      });
 
-    bootstrapped.value = true;
+      bootstrapped.value = true;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   };
 
   const ensureLoaded = async () => {
+    if (process.server) return;
     if (bootstrapped.value || bootstrapping.value) return;
     bootstrapping.value = true;
     try {
       await fetchBootstrap();
     } catch (error) {
+      console.error('Bootstrap error', error);
       currentUser.value = null;
       wallets.value = [];
       expenseCategories.value = [];
       incomeCategories.value = [];
       transactions.value = [];
       bootstrapped.value = false;
+      setFlash('Gagal memuat data. Coba muat ulang.', 'error');
     } finally {
       bootstrapping.value = false;
     }
@@ -916,6 +947,8 @@ export const useMoneyManager = () => {
     initials,
     notifications,
     notificationStyles,
+    bootstrapping,
+    flashMessage,
     wallets,
     expenseCategories,
     incomeCategories,
@@ -941,6 +974,8 @@ export const useMoneyManager = () => {
     markAllNotificationsRead,
     ensureLoaded,
     refreshData,
+    setFlash,
+    clearFlash,
     handleOpenAddWallet,
     handleOpenEditWallet,
     handleSaveWallet,

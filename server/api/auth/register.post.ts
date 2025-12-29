@@ -21,8 +21,13 @@ const categoryIcons: Record<string, string> = {
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
+  const name = String(body?.name || '').trim();
   const email = String(body?.email || '').trim().toLowerCase();
   const password = String(body?.password || '');
+
+  if (!name) {
+    throw createError({ statusCode: 400, statusMessage: 'Nama wajib diisi.' });
+  }
 
   if (!email || !password) {
     throw createError({ statusCode: 400, statusMessage: 'Email dan password wajib diisi.' });
@@ -38,8 +43,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const user = await prisma.user.create({
-    data: { email, password: hashPassword(password) },
-    select: { id: true, email: true },
+    data: { name, email, password: hashPassword(password) },
+    select: { id: true, email: true, name: true },
   });
 
   await prisma.$transaction([

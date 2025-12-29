@@ -7,6 +7,7 @@ const showPassword = ref(false);
 const rememberMe = ref(false);
 const loading = ref(false);
 const errorMsg = ref<string | null>(null);
+const { setFlash } = useMoneyManager();
 
 async function login() {
     loading.value = true;
@@ -22,6 +23,7 @@ async function login() {
         });
 
         const redirect = typeof route.query.redirect === "string" ? route.query.redirect : "/";
+        setFlash("Login berhasil. Selamat datang!", "success");
         return navigateTo(redirect);
     } catch (error: any) {
         errorMsg.value =
