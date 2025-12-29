@@ -26,8 +26,8 @@ const isActive = (path: string) => route.path === path;
 </script>
 
 <template>
-  <div class="flex justify-center items-center min-h-screen bg-gray-100 font-sans md:items-stretch md:bg-gray-50 md:p-0">
-    <div class="w-full h-screen flex flex-col overflow-hidden">
+  <div class="flex justify-center items-center min-h-[100dvh] bg-gray-100 font-sans md:items-stretch md:bg-gray-50 md:p-0">
+    <div class="w-full min-h-[100dvh] flex flex-col overflow-hidden">
       <div
         class="flex-1 flex flex-col relative h-full overflow-hidden w-full max-w-md mx-auto md:max-w-4xl md:mx-auto bg-white md:bg-gray-50 shadow-2xl md:shadow-none"
       >
@@ -96,11 +96,11 @@ const isActive = (path: string) => route.path === path;
           </div>
         </div>
 
-        <div class="flex-1 overflow-y-auto px-6 md:px-8 scrollbar-hide pb-32">
+        <div class="flex-1 overflow-y-auto px-6 md:px-8 scrollbar-hide pb-[calc(8rem+env(safe-area-inset-bottom))]">
           <slot />
         </div>
 
-        <div class="absolute bottom-10 left-1/2 transform -translate-x-1/2 z-30">
+        <div class="absolute bottom-[calc(2.5rem+env(safe-area-inset-bottom))] left-1/2 transform -translate-x-1/2 z-30">
           <button
             @click="showAddModal = true"
             class="w-16 h-16 bg-lime-400 rounded-full flex items-center justify-center shadow-lg shadow-lime-300/50 text-slate-900 border-4 border-gray-50 md:border-gray-50 hover:scale-105 transition-transform"
@@ -109,7 +109,7 @@ const isActive = (path: string) => route.path === path;
           </button>
         </div>
 
-        <div class="absolute bottom-6 left-4 right-4 md:left-8 md:right-8 bg-slate-900 rounded-2xl px-2 py-3 flex justify-between items-center z-20 shadow-2xl">
+        <div class="absolute bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-4 right-4 md:left-8 md:right-8 bg-slate-900 rounded-2xl px-2 py-3 flex justify-between items-center z-20 shadow-2xl">
           <div class="flex-1 flex justify-around">
             <NuxtLink
               to="/"
