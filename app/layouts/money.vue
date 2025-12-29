@@ -100,7 +100,7 @@ const isActive = (path: string) => route.path === path;
           <slot />
         </div>
 
-        <div class="absolute bottom-[calc(2.5rem+env(safe-area-inset-bottom))] left-1/2 transform -translate-x-1/2 z-30">
+        <div class="fixed bottom-[calc(2.5rem+env(safe-area-inset-bottom))] left-1/2 transform -translate-x-1/2 z-30">
           <button
             @click="showAddModal = true"
             class="w-16 h-16 bg-lime-400 rounded-full flex items-center justify-center shadow-lg shadow-lime-300/50 text-slate-900 border-4 border-gray-50 md:border-gray-50 hover:scale-105 transition-transform"
@@ -109,45 +109,51 @@ const isActive = (path: string) => route.path === path;
           </button>
         </div>
 
-        <div class="absolute bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-4 right-4 md:left-8 md:right-8 bg-slate-900 rounded-2xl px-2 py-3 flex justify-between items-center z-20 shadow-2xl">
-          <div class="flex-1 flex justify-around">
-            <NuxtLink
-              to="/"
-              class="flex flex-col items-center gap-1 transition-colors"
-              :class="isActive('/') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
-            >
-              <i class="fas fa-home text-lg"></i>
-              <span class="text-[10px] font-bold">Beranda</span>
-            </NuxtLink>
-            <NuxtLink
-              to="/analytics"
-              class="flex flex-col items-center gap-1 transition-colors"
-              :class="isActive('/analytics') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
-            >
-              <i class="fas fa-chart-pie text-lg"></i>
-              <span class="text-[10px] font-bold">Analitik</span>
-            </NuxtLink>
-          </div>
+        <div class="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-20">
+          <div
+            class="mx-auto max-w-md md:max-w-4xl px-4 md:px-8"
+          >
+            <div class="bg-slate-900 rounded-2xl px-2 py-3 flex justify-between items-center shadow-2xl">
+              <div class="flex-1 flex justify-around">
+                <NuxtLink
+                  to="/"
+                  class="flex flex-col items-center gap-1 transition-colors"
+                  :class="isActive('/') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
+                >
+                  <i class="fas fa-home text-lg"></i>
+                  <span class="text-[10px] font-bold">Beranda</span>
+                </NuxtLink>
+                <NuxtLink
+                  to="/analytics"
+                  class="flex flex-col items-center gap-1 transition-colors"
+                  :class="isActive('/analytics') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
+                >
+                  <i class="fas fa-chart-pie text-lg"></i>
+                  <span class="text-[10px] font-bold">Analitik</span>
+                </NuxtLink>
+              </div>
 
-          <div class="w-16"></div>
+              <div class="w-16"></div>
 
-          <div class="flex-1 flex justify-around">
-            <NuxtLink
-              to="/master"
-              class="flex flex-col items-center gap-1 transition-colors"
-              :class="isActive('/master') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
-            >
-              <i class="fas fa-database text-lg"></i>
-              <span class="text-[10px] font-bold">Master</span>
-            </NuxtLink>
-            <NuxtLink
-              to="/profile"
-              class="flex flex-col items-center gap-1 transition-colors"
-              :class="isActive('/profile') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
-            >
-              <i class="fas fa-user text-lg"></i>
-              <span class="text-[10px] font-bold">Profil</span>
-            </NuxtLink>
+              <div class="flex-1 flex justify-around">
+                <NuxtLink
+                  to="/master"
+                  class="flex flex-col items-center gap-1 transition-colors"
+                  :class="isActive('/master') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
+                >
+                  <i class="fas fa-database text-lg"></i>
+                  <span class="text-[10px] font-bold">Master</span>
+                </NuxtLink>
+                <NuxtLink
+                  to="/profile"
+                  class="flex flex-col items-center gap-1 transition-colors"
+                  :class="isActive('/profile') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
+                >
+                  <i class="fas fa-user text-lg"></i>
+                  <span class="text-[10px] font-bold">Profil</span>
+                </NuxtLink>
+              </div>
+            </div>
           </div>
         </div>
 
