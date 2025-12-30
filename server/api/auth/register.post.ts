@@ -48,6 +48,7 @@ export default defineEventHandler(async (event) => {
       id: true,
       email: true,
       name: true,
+      avatarUrl: true,
       notificationsEnabled: true,
       darkMode: true,
       currency: true,

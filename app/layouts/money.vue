@@ -84,7 +84,7 @@ onBeforeUnmount(() => {
 
         <div
           v-if="flashMessage"
-          class="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md md:max-w-4xl"
+          class="fixed top-4 left-1/2 -translate-x-1/2 z-[90] w-[calc(100%-2rem)] max-w-md md:max-w-4xl"
         >
           <div
             class="rounded-2xl px-4 py-3 border shadow-xl flex items-center gap-3"

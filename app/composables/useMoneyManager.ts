@@ -13,6 +13,7 @@ interface UserInfo {
   id: string;
   email: string;
   name?: string | null;
+  avatarUrl?: string | null;
   notificationsEnabled?: boolean | null;
   darkMode?: boolean | null;
   currency?: CurrencyCode | null;
@@ -93,6 +94,7 @@ interface CategoryFormState {
 
 interface ProfileFormState {
   name: string;
+  avatarUrl: string | null;
 }
 
 interface PasswordFormState {
@@ -217,6 +219,13 @@ export const useMoneyManager = () => {
     if (parts.length === 0) return 'MM';
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  });
+
+  const avatarUrl = computed(() => {
+    const raw = currentUser.value?.avatarUrl;
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    return trimmed ? trimmed : null;
   });
 
   const notificationsEnabled = computed(
@@ -413,6 +422,10 @@ export const useMoneyManager = () => {
       showingCategories: 'Menampilkan {start}-{end} dari {total} kategori',
       account: 'Akun',
       editProfile: 'Edit Profil',
+      avatar: 'Avatar',
+      changeAvatar: 'Ganti Avatar',
+      removeAvatar: 'Hapus Avatar',
+      avatarHint: 'PNG/JPG, maks 512KB.',
       changePassword: 'Ganti Password',
       dataSecurity: 'Data & Keamanan',
       exportData: 'Ekspor Data (CSV)',
@@ -560,6 +573,10 @@ export const useMoneyManager = () => {
       showingCategories: 'Showing {start}-{end} of {total} categories',
       account: 'Account',
       editProfile: 'Edit Profile',
+      avatar: 'Avatar',
+      changeAvatar: 'Change Avatar',
+      removeAvatar: 'Remove Avatar',
+      avatarHint: 'PNG/JPG, max 512KB.',
       changePassword: 'Change Password',
       dataSecurity: 'Data & Security',
       exportData: 'Export Data (CSV)',
@@ -653,7 +670,7 @@ export const useMoneyManager = () => {
   const walletToDelete = useState<WalletItem | null>('mm-walletToDelete', () => null);
   const editingCategory = useState<CategoryItem | null>('mm-editingCategory', () => null);
   const categoryToDelete = useState<CategoryItem | null>('mm-categoryToDelete', () => null);
-  const profileForm = useState<ProfileFormState>('mm-profileForm', () => ({ name: '' }));
+  const profileForm = useState<ProfileFormState>('mm-profileForm', () => ({ name: '', avatarUrl: null }));
   const passwordForm = useState<PasswordFormState>('mm-passwordForm', () => ({
     currentPassword: '',
     newPassword: '',
@@ -927,6 +944,7 @@ export const useMoneyManager = () => {
 
   const openProfileModal = () => {
     profileForm.value.name = currentUser.value?.name?.trim() || displayName.value;
+    profileForm.value.avatarUrl = currentUser.value?.avatarUrl ?? null;
     showProfileModal.value = true;
   };
 
@@ -940,10 +958,11 @@ export const useMoneyManager = () => {
       setFlash('Nama wajib diisi.', 'error');
       return;
     }
+    const avatarUrl = profileForm.value.avatarUrl?.trim() || null;
     try {
       const response = await $fetch<{ user: UserInfo }>('/api/user', {
         method: 'PUT',
-        body: { name },
+        body: { name, avatarUrl },
       });
       currentUser.value = response.user;
       setFlash('Profil berhasil diperbarui.', 'success');
@@ -1493,6 +1512,7 @@ export const useMoneyManager = () => {
     displayName,
     displayEmail,
     initials,
+    avatarUrl,
     notificationsEnabled,
     darkModeEnabled,
     preferredCurrency,

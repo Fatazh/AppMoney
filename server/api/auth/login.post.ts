@@ -23,6 +23,7 @@ export default defineEventHandler(async (event) => {
       id: user.id,
       email: user.email,
       name: user.name,
+      avatarUrl: user.avatarUrl,
       notificationsEnabled: user.notificationsEnabled,
       darkMode: user.darkMode,
       currency: user.currency,

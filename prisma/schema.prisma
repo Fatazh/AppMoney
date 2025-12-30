@@ -18,6 +18,7 @@ model User {
   name      String   @default("")
   email     String   @unique
   password  String
+  avatarUrl String?  @db.Text
   notificationsEnabled Boolean @default(true)
   darkMode  Boolean @default(false)
   currency  String   @default("IDR")

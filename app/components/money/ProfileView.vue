@@ -3,6 +3,7 @@ const {
   displayName,
   displayEmail,
   initials,
+  avatarUrl,
   notificationsEnabled,
   darkModeEnabled,
   preferredCurrency,
@@ -14,7 +15,6 @@ const {
   setCurrencyPreference,
   setLanguagePreference,
   t,
-  handleDownloadExcel,
   handleLogout,
   openProfileModal,
   openPasswordModal,
@@ -26,8 +26,17 @@ const {
     <div class="bg-slate-900 rounded-3xl p-6 text-white shadow-xl shadow-slate-200 mb-6 text-center relative overflow-hidden">
       <div class="absolute -right-4 -top-4 w-32 h-32 bg-lime-400 opacity-10 rounded-full blur-2xl"></div>
       <div class="absolute -left-4 -bottom-4 w-24 h-24 bg-blue-500 opacity-20 rounded-full blur-xl"></div>
-      <div class="w-24 h-24 bg-gray-200 rounded-full mx-auto mb-4 border-4 border-slate-800 relative shadow-lg">
-        <div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-lime-400 to-green-500 rounded-full text-slate-900 font-bold text-3xl">
+      <div class="w-24 h-24 bg-gray-200 rounded-full mx-auto mb-4 border-4 border-slate-800 relative shadow-lg overflow-hidden">
+        <img
+          v-if="avatarUrl"
+          :src="avatarUrl"
+          alt="Avatar"
+          class="w-full h-full object-cover rounded-full"
+        />
+        <div
+          v-else
+          class="w-full h-full flex items-center justify-center bg-gradient-to-br from-lime-400 to-green-500 rounded-full text-slate-900 font-bold text-3xl"
+        >
           {{ initials }}
         </div>
         <button
@@ -159,18 +168,6 @@ const {
       <div>
         <h3 class="text-xs font-bold text-gray-400 uppercase mb-2 ml-4">{{ t('dataSecurity') }}</h3>
         <div class="bg-white rounded-2xl p-2 shadow-sm border border-gray-100">
-          <div
-            class="flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors hover:bg-gray-50"
-            @click="handleDownloadExcel"
-          >
-            <div class="flex items-center gap-3">
-              <div class="p-2 rounded-lg bg-gray-100 text-slate-700">
-                <i class="fas fa-download"></i>
-              </div>
-              <span class="font-medium text-slate-700">{{ t('exportData') }}</span>
-            </div>
-            <i class="fas fa-chevron-right text-gray-400"></i>
-          </div>
           <div class="flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors hover:bg-gray-50">
             <div class="flex items-center gap-3">
               <div class="p-2 rounded-lg bg-gray-100 text-slate-700">

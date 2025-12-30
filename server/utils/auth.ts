@@ -88,6 +88,7 @@ export const getUserFromEvent = async (event: any) => {
       id: true,
       email: true,
       name: true,
+      avatarUrl: true,
       notificationsEnabled: true,
       darkMode: true,
       currency: true,
