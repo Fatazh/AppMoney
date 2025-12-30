@@ -18,6 +18,7 @@ const activeMasterTab = ref<'wallet' | 'category'>('wallet');
   openCategoryModal,
   requestDeleteCategory,
   handleOpenEditCategory,
+  t,
 } = useMoneyManager();
 
 const allCategories = computed(() => {
@@ -45,7 +46,7 @@ watch(allCategories, () => {
 <template>
   <div class="h-full flex flex-col pt-6">
     <div class="flex justify-between items-center mb-6">
-      <h2 class="text-2xl font-bold text-slate-900">Master Data</h2>
+      <h2 class="text-2xl font-bold text-slate-900">{{ t('masterData') }}</h2>
     </div>
     <div class="flex p-1 bg-gray-100 rounded-xl w-full md:w-fit mb-6">
       <button
@@ -57,7 +58,7 @@ watch(allCategories, () => {
             : 'text-gray-500 hover:text-slate-700'
         "
       >
-        Dompet
+        {{ t('wallet') }}
       </button>
       <button
         @click="activeMasterTab = 'category'"
@@ -68,13 +69,13 @@ watch(allCategories, () => {
             : 'text-gray-500 hover:text-slate-700'
         "
       >
-        Kategori
+        {{ t('category') }}
       </button>
     </div>
 
     <div v-if="activeMasterTab === 'wallet'" class="animate-fade-in pb-32 md:pb-32 pt-6">
       <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 text-white shadow-xl shadow-slate-200 mb-8">
-        <p class="text-slate-400 text-sm font-medium mb-1">Total Aset</p>
+        <p class="text-slate-400 text-sm font-medium mb-1">{{ t('totalAssets') }}</p>
         <h1 class="text-3xl font-bold text-white tracking-tight">{{ formatRupiah(totalBalance) }}</h1>
       </div>
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -99,7 +100,7 @@ watch(allCategories, () => {
                 <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{{ wallet.type }}</p>
               </div>
               <button
-                title="Hapus Dompet"
+                :title="t('deleteWallet')"
                 class="w-8 h-8 rounded-lg border border-red-100 text-red-500 hover:text-red-600 hover:border-red-200 transition-colors bg-white"
                 @click.stop="requestDeleteWallet(wallet.id)"
               >
@@ -115,13 +116,13 @@ watch(allCategories, () => {
             <div class="flex flex-col">
               <div class="flex items-center gap-1 text-slate-400 mb-0.5">
                 <i class="fas fa-arrow-down text-red-500 text-[10px]"></i>
-                <span class="text-[10px] font-semibold">Keluar</span>
+                <span class="text-[10px] font-semibold">{{ t('outgoing') }}</span>
               </div>
               <span class="text-xs font-bold text-slate-700">{{ formatShortRupiah(getWalletExpense(wallet.id)) }}</span>
             </div>
             <div class="flex flex-col items-end">
               <div class="flex items-center gap-1 text-slate-400 mb-0.5">
-                <span class="text-[10px] font-semibold">Masuk</span>
+                <span class="text-[10px] font-semibold">{{ t('incoming') }}</span>
                 <i class="fas fa-arrow-up text-lime-500 text-[10px]"></i>
               </div>
               <span class="text-xs font-bold text-slate-700">{{ formatShortRupiah(getWalletIncome(wallet.id)) }}</span>
@@ -140,7 +141,7 @@ watch(allCategories, () => {
           <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">
             <i class="fas fa-plus"></i>
           </div>
-          <span class="text-xs font-bold">Tambah Dompet</span>
+          <span class="text-xs font-bold">{{ t('addWallet') }}</span>
         </button>
       </div>
     </div>
@@ -149,8 +150,8 @@ watch(allCategories, () => {
       <div class="bg-white rounded-3xl p-4 md:p-6 border border-gray-100 shadow-sm">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <div>
-            <h3 class="font-bold text-slate-900 text-lg">Daftar Kategori</h3>
-            <p class="text-xs text-gray-400">Icon dan tipe kategori untuk transaksi.</p>
+            <h3 class="font-bold text-slate-900 text-lg">{{ t('categoryList') }}</h3>
+            <p class="text-xs text-gray-400">{{ t('categoryListSubtitle') }}</p>
           </div>
           <div class="flex gap-2">
             <button
@@ -158,7 +159,7 @@ watch(allCategories, () => {
               class="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
             >
               <i class="fas fa-plus mr-1"></i>
-              Tambah Kategori
+              {{ t('addCategory') }}
             </button>
           </div>
         </div>
@@ -167,10 +168,10 @@ watch(allCategories, () => {
           <table class="w-full text-sm">
             <thead class="text-xs text-gray-400 uppercase">
               <tr class="border-b border-gray-100">
-                <th class="text-left py-3 px-2">Icon</th>
-                <th class="text-left py-3 px-2">Nama</th>
-                <th class="text-left py-3 px-2">Tipe</th>
-                <th class="text-right py-3 px-2">Aksi</th>
+                <th class="text-left py-3 px-2">{{ t('icon') }}</th>
+                <th class="text-left py-3 px-2">{{ t('name') }}</th>
+                <th class="text-left py-3 px-2">{{ t('typeLabel') }}</th>
+                <th class="text-right py-3 px-2">{{ t('actions') }}</th>
               </tr>
             </thead>
             <tbody v-if="pagedCategories.length > 0">
@@ -192,20 +193,20 @@ watch(allCategories, () => {
                     class="px-2.5 py-1 rounded-full text-[11px] font-bold border"
                     :class="cat.type === 'expense' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-lime-50 text-lime-700 border-lime-100'"
                   >
-                    {{ cat.type === 'expense' ? 'Pengeluaran' : 'Pemasukan' }}
+                    {{ cat.type === 'expense' ? t('expenseBadge') : t('incomeBadge') }}
                   </span>
                 </td>
                 <td class="py-3 px-2 text-right">
                   <div class="flex items-center justify-end gap-2">
                     <button
-                      title="Edit"
+                      :title="t('edit')"
                       @click="handleOpenEditCategory(cat)"
                       class="w-8 h-8 rounded-lg border border-gray-200 text-slate-500 hover:text-slate-700 hover:border-gray-300 transition-colors"
                     >
                       <i class="fas fa-pen text-xs"></i>
                     </button>
                     <button
-                      title="Hapus"
+                      :title="t('delete')"
                       @click="requestDeleteCategory(cat.id)"
                       class="w-8 h-8 rounded-lg border border-red-100 text-red-500 hover:text-red-600 hover:border-red-200 transition-colors"
                     >
@@ -217,11 +218,11 @@ watch(allCategories, () => {
             </tbody>
           </table>
           <div v-if="allCategories.length === 0" class="text-center py-8 text-gray-400">
-            <p>Belum ada kategori.</p>
+            <p>{{ t('noCategories') }}</p>
           </div>
           <div v-else class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-4">
             <p class="text-xs text-gray-400">
-              Menampilkan {{ pageStart }}-{{ pageEnd }} dari {{ allCategories.length }} kategori
+              {{ t('showingCategories', { start: pageStart, end: pageEnd, total: allCategories.length }) }}
             </p>
             <div class="flex items-center gap-2">
               <button
@@ -231,16 +232,18 @@ watch(allCategories, () => {
                 @click="currentPage = Math.max(1, currentPage - 1)"
               >
                 <i class="fas fa-chevron-left mr-1"></i>
-                Sebelumnya
+                {{ t('prev') }}
               </button>
-              <span class="text-xs font-semibold text-slate-600">Hal {{ currentPage }} / {{ totalPages }}</span>
+              <span class="text-xs font-semibold text-slate-600">
+                {{ t('pageLabel', { current: currentPage, total: totalPages }) }}
+              </span>
               <button
                 class="px-3 py-2 rounded-lg text-xs font-bold border transition-colors"
                 :class="currentPage === totalPages ? 'border-gray-200 text-gray-300' : 'border-gray-200 text-slate-600 hover:border-gray-300'"
                 :disabled="currentPage === totalPages"
                 @click="currentPage = Math.min(totalPages, currentPage + 1)"
               >
-                Berikutnya
+                {{ t('next') }}
                 <i class="fas fa-chevron-right ml-1"></i>
               </button>
             </div>

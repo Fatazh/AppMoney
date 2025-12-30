@@ -5,6 +5,7 @@ const {
   editingCategory,
   handleSaveCategory,
   requestDeleteCategory,
+  t,
 } = useMoneyManager();
 
 const iconOptions = [
@@ -28,7 +29,7 @@ const iconOptions = [
     <div class="bg-white w-full max-w-sm rounded-3xl p-6 animate-slide-up-content shadow-2xl md:animate-fade-in">
       <div class="flex justify-between items-center mb-6">
         <h3 class="text-xl font-bold text-slate-900">
-          {{ editingCategory ? 'Edit Kategori' : 'Tambah Kategori' }}
+          {{ editingCategory ? t('editCategory') : t('addCategory') }}
         </h3>
         <button @click="showCategoryModal = false" class="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
           <i class="fas fa-times"></i>
@@ -36,16 +37,16 @@ const iconOptions = [
       </div>
       <div class="space-y-4 mb-8">
         <div>
-          <label class="block text-xs text-gray-400 mb-1 ml-1">Nama Kategori</label>
+          <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('categoryNameLabel') }}</label>
           <input
             v-model="categoryForm.name"
             type="text"
-            placeholder="Contoh: Hiburan, Bonus"
+            :placeholder="t('categoryExample')"
             class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
           />
         </div>
         <div>
-          <label class="block text-xs text-gray-400 mb-1 ml-1">Tipe</label>
+          <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('typeLabel') }}</label>
           <div class="flex gap-2">
             <button
               type="button"
@@ -53,7 +54,7 @@ const iconOptions = [
               :class="categoryForm.type === 'expense' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'"
               @click="categoryForm.type = 'expense'"
             >
-              Pengeluaran
+              {{ t('expenseBadge') }}
             </button>
             <button
               type="button"
@@ -61,12 +62,12 @@ const iconOptions = [
               :class="categoryForm.type === 'income' ? 'bg-lime-50 text-lime-700 border-lime-200' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'"
               @click="categoryForm.type = 'income'"
             >
-              Pemasukan
+              {{ t('incomeBadge') }}
             </button>
           </div>
         </div>
         <div>
-          <label class="block text-xs text-gray-400 mb-2 ml-1">Icon</label>
+          <label class="block text-xs text-gray-400 mb-2 ml-1">{{ t('icon') }}</label>
           <div class="grid grid-cols-4 gap-2">
             <button
               v-for="icon in iconOptions"
@@ -87,14 +88,14 @@ const iconOptions = [
           @click="handleSaveCategory"
           class="w-full bg-lime-400 text-slate-900 py-3 rounded-xl font-bold hover:bg-lime-500 transition-colors"
         >
-          {{ editingCategory ? 'Simpan Perubahan' : 'Simpan Kategori' }}
+          {{ editingCategory ? t('saveChanges') : t('saveCategory') }}
         </button>
         <button
           v-if="editingCategory"
           @click="requestDeleteCategory()"
           class="w-full bg-red-50 text-red-600 py-3 rounded-xl font-bold hover:bg-red-100 transition-colors border border-red-100"
         >
-          Hapus Kategori
+          {{ t('deleteCategory') }}
         </button>
       </div>
     </div>

@@ -10,6 +10,7 @@ const {
   formatRupiah,
   topTransactions,
   currentMonthTransactions,
+  t,
 } = useMoneyManager();
 
 const weeklyChartSafe = computed(
@@ -26,6 +27,11 @@ const activeType = ref<'income' | 'expense' | null>(null);
 const selectedWeek = computed(() =>
   activeWeekIndex.value === null ? null : weeklyChartSafe.value.data[activeWeekIndex.value]
 );
+
+const activeTypeLabel = computed(() => {
+  if (!activeType.value) return '';
+  return activeType.value === 'income' ? t('incomeBadge') : t('expenseBadge');
+});
 
 const detailTransactions = computed(() => {
   if (!selectedWeek.value || !activeType.value) return [];
@@ -77,13 +83,13 @@ const closeTransactionDetail = () => {
 const formatPromo = (transaction: typeof selectedTransaction.value) => {
   if (!transaction?.promoType) return '-';
   if (transaction.promoType === 'PERCENT') {
-    return `Diskon ${transaction.promoValue ?? 0}%`;
+    return t('discountPercent', { value: transaction.promoValue ?? 0 });
   }
   if (transaction.promoType === 'FIXED') {
-    return `Diskon ${formatRupiah(transaction.promoValue ?? 0)}`;
+    return t('discountNominal', { value: formatRupiah(transaction.promoValue ?? 0) });
   }
   if (transaction.promoType === 'BUY_X_GET_Y') {
-    return `Buy ${transaction.promoBuyX ?? 0} Get ${transaction.promoGetY ?? 0}`;
+    return t('buyXGetY', { buy: transaction.promoBuyX ?? 0, get: transaction.promoGetY ?? 0 });
   }
   return '-';
 };
@@ -109,7 +115,7 @@ const goToTransactions = () => {
       >
         <div class="absolute -right-4 -top-4 w-32 h-32 bg-lime-400 opacity-20 rounded-full blur-2xl"></div>
         <div class="absolute -left-4 -bottom-4 w-24 h-24 bg-blue-500 opacity-20 rounded-full blur-xl"></div>
-        <p class="text-slate-300 text-sm mb-1">Total Saldo Anda</p>
+        <p class="text-slate-300 text-sm mb-1">{{ t('totalBalance') }}</p>
         <h1 class="text-3xl md:text-4xl font-bold mb-6 text-lime-400 tracking-tight">
           {{ formatRupiah(totalBalance) }}
         </h1>
@@ -119,7 +125,7 @@ const goToTransactions = () => {
               <i class="fas fa-arrow-down text-sm"></i>
             </div>
             <div>
-              <p class="text-xs text-slate-300">Pemasukan</p>
+              <p class="text-xs text-slate-300">{{ t('income') }}</p>
               <p class="font-semibold text-sm">{{ formatRupiah(dashboardIncome) }}</p>
             </div>
           </div>
@@ -129,7 +135,7 @@ const goToTransactions = () => {
               <i class="fas fa-arrow-up text-sm"></i>
             </div>
             <div>
-              <p class="text-xs text-slate-300">Pengeluaran</p>
+              <p class="text-xs text-slate-300">{{ t('expense') }}</p>
               <p class="font-semibold text-sm">{{ formatRupiah(dashboardExpense) }}</p>
             </div>
           </div>
@@ -138,15 +144,15 @@ const goToTransactions = () => {
 
       <div class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm mb-6 animate-fade-in">
         <div class="flex justify-between items-center mb-4">
-          <h3 class="font-bold text-slate-900 text-sm">Arus Kas Mingguan</h3>
+          <h3 class="font-bold text-slate-900 text-sm">{{ t('weeklyCashFlow') }}</h3>
           <div class="flex gap-3">
             <div class="flex items-center gap-1">
               <div class="w-2 h-2 rounded-full bg-lime-400"></div>
-              <span class="text-[10px] text-gray-500">Masuk</span>
+              <span class="text-[10px] text-gray-500">{{ t('incoming') }}</span>
             </div>
             <div class="flex items-center gap-1">
-              <div class="w-2 h-2 rounded-full bg-slate-900"></div>
-              <span class="text-[10px] text-gray-500">Keluar</span>
+              <div class="w-2 h-2 rounded-full bg-slate-900 mm-expense-dot"></div>
+              <span class="text-[10px] text-gray-500">{{ t('outgoing') }}</span>
             </div>
           </div>
         </div>
@@ -163,10 +169,10 @@ const goToTransactions = () => {
                   class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block z-10"
                 >
                   <div class="bg-slate-800 text-white text-[10px] p-2 rounded-lg shadow-lg whitespace-nowrap">
-                    <p class="text-lime-400 font-bold">Masuk {{ d.income }} transaksi</p>
-                    <p class="text-white font-bold">Keluar {{ d.expense }} transaksi</p>
+                    <p class="text-lime-400 font-bold">{{ t('weeklyTooltipIncome', { count: d.income }) }}</p>
+                    <p class="text-white font-bold">{{ t('weeklyTooltipExpense', { count: d.expense }) }}</p>
                     <p class="text-gray-400 text-center mt-1 border-t border-gray-600 pt-1">
-                      Minggu {{ d.week }} ({{ d.startDay }}-{{ d.endDay }})
+                      {{ t('weekRange', { week: d.week, start: d.startDay, end: d.endDay }) }}
                     </p>
                   </div>
                 </div>
@@ -179,7 +185,7 @@ const goToTransactions = () => {
                   }"
                 ></div>
                 <div
-                  class="w-2 rounded-t-sm bg-slate-900 transition-all duration-500 hover:bg-slate-700"
+                  class="w-2 rounded-t-sm bg-slate-900 transition-all duration-500 hover:bg-slate-700 mm-expense-bar"
                   @click.stop="selectWeek(index, 'expense')"
                   :style="{
                     height: `${(d.expense / weeklyChartSafe.maxVal) * 100}%`,
@@ -188,31 +194,31 @@ const goToTransactions = () => {
                 ></div>
               </div>
               <div class="flex flex-col items-center leading-tight">
-                <span class="text-[10px] text-gray-400 font-semibold">Mg {{ d.week }}</span>
+                <span class="text-[10px] text-gray-400 font-semibold">{{ t('weekShort', { week: d.week }) }}</span>
                 <span class="text-[9px] text-gray-300">{{ d.startDay }}-{{ d.endDay }}</span>
               </div>
             </div>
           </div>
         </div>
         <div v-else class="text-center py-10 text-gray-400 border border-dashed border-gray-200 rounded-2xl">
-          <p>Belum ada transaksi di bulan ini.</p>
+          <p>{{ t('noTransactionsThisMonth') }}</p>
         </div>
 
         <div v-if="selectedWeek && activeType" class="mt-5 border-t border-gray-100 pt-4">
           <div class="flex items-center justify-between mb-3">
             <div>
               <h4 class="text-sm font-bold text-slate-900">
-                Detail Minggu {{ selectedWeek.week }} - {{ activeType === 'income' ? 'Pemasukan' : 'Pengeluaran' }}
+                {{ t('weeklyDetailTitle', { week: selectedWeek.week, type: activeTypeLabel }) }}
               </h4>
               <p class="text-[11px] text-gray-400">
-                Rentang {{ selectedWeek.startDay }}-{{ selectedWeek.endDay }} bulan ini
+                {{ t('weeklyRangeLabel', { start: selectedWeek.startDay, end: selectedWeek.endDay }) }}
               </p>
             </div>
             <button
               class="text-xs font-semibold text-gray-400 hover:text-slate-600"
               @click="clearSelection"
             >
-              Tutup
+              {{ t('close') }}
             </button>
           </div>
           <div class="space-y-3 max-h-64 overflow-y-auto scrollbar-hide pr-1">
@@ -238,7 +244,7 @@ const goToTransactions = () => {
               </span>
             </div>
             <div v-if="detailTransactions.length === 0" class="text-center py-6 text-gray-400">
-              <p>Tidak ada transaksi pada minggu ini.</p>
+              <p>{{ t('noTransactionsThisWeek') }}</p>
             </div>
           </div>
         </div>
@@ -247,8 +253,8 @@ const goToTransactions = () => {
 
     <div class="md:col-span-5 lg:col-span-4 mt-8 md:mt-0">
       <div class="flex justify-between items-center mb-4 animate-fade-in">
-        <h3 class="font-bold text-slate-900 text-lg">Transaksi Bulan Ini</h3>
-        <button class="text-lime-600 text-sm font-semibold" @click="goToTransactions">Lihat Semua</button>
+        <h3 class="font-bold text-slate-900 text-lg">{{ t('transactionsThisMonth') }}</h3>
+        <button class="text-lime-600 text-sm font-semibold" @click="goToTransactions">{{ t('viewAll') }}</button>
       </div>
       <div class="space-y-6 animate-slide-up-content">
         <div v-if="topTransactions.length > 0">
@@ -280,7 +286,7 @@ const goToTransactions = () => {
           </div>
         </div>
         <div v-else class="text-center py-8 text-gray-400 border border-dashed rounded-xl border-gray-200">
-          <p>Belum ada transaksi bulan ini.</p>
+          <p>{{ t('noTransactionsThisMonth') }}</p>
         </div>
       </div>
     </div>
@@ -294,7 +300,7 @@ const goToTransactions = () => {
         <div class="relative z-10 bg-white w-full sm:w-11/12 md:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up md:animate-fade-in">
           <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
             <div>
-              <p class="text-xs text-gray-400">Detail Transaksi</p>
+              <p class="text-xs text-gray-400">{{ t('detailTransactions') }}</p>
               <h3 class="text-lg font-bold text-slate-900">{{ selectedTransaction.title }}</h3>
             </div>
             <button
@@ -307,29 +313,29 @@ const goToTransactions = () => {
           <div class="px-6 py-5 space-y-3">
             <template v-if="selectedTransaction.type === 'income'">
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Tipe</span>
+                <span class="text-xs text-gray-400">{{ t('type') }}</span>
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-lime-50 text-lime-600">
-                  Pemasukan
+                  {{ t('incomeBadge') }}
                 </span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Tanggal</span>
+                <span class="text-xs text-gray-400">{{ t('date') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.date }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Nama Pemasukan</span>
+                <span class="text-xs text-gray-400">{{ t('incomeName') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ selectedTransaction.title }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Kategori</span>
+                <span class="text-xs text-gray-400">{{ t('categoryLabel') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ selectedTransaction.category }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Masuk ke Dompet</span>
+                <span class="text-xs text-gray-400">{{ t('walletIn') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.wallet }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Jumlah</span>
+                <span class="text-xs text-gray-400">{{ t('amount') }}</span>
                 <span class="text-sm font-bold text-slate-900">
                   {{ formatRupiah(Math.abs(selectedTransaction.amount)) }}
                 </span>
@@ -337,39 +343,39 @@ const goToTransactions = () => {
             </template>
             <template v-else>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Tipe</span>
+                <span class="text-xs text-gray-400">{{ t('type') }}</span>
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-600">
-                  Pengeluaran
+                  {{ t('expenseBadge') }}
                 </span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Nama</span>
+                <span class="text-xs text-gray-400">{{ t('name') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ selectedTransaction.title }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Tanggal</span>
+                <span class="text-xs text-gray-400">{{ t('date') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.date }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Keterangan</span>
+                <span class="text-xs text-gray-400">{{ t('note') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ formatNote(selectedTransaction) }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Nominal</span>
+                <span class="text-xs text-gray-400">{{ t('nominal') }}</span>
                 <span class="text-sm font-bold text-slate-900">
                   {{ formatRupiah(Math.abs(selectedTransaction.amount)) }}
                 </span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Satuan</span>
+                <span class="text-xs text-gray-400">{{ t('unitPrice') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ formatSatuan(selectedTransaction) }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Promo</span>
+                <span class="text-xs text-gray-400">{{ t('promo') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ formatPromo(selectedTransaction) }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Sumber Dana</span>
+                <span class="text-xs text-gray-400">{{ t('sourceWallet') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.wallet }}</span>
               </div>
             </template>
@@ -379,7 +385,7 @@ const goToTransactions = () => {
               class="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-colors"
               @click="closeTransactionDetail"
             >
-              Tutup
+              {{ t('close') }}
             </button>
           </div>
         </div>

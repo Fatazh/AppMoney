@@ -5,6 +5,8 @@ import WalletModal from '~/components/money/modals/WalletModal.vue';
 import CategoryModal from '~/components/money/modals/CategoryModal.vue';
 import DeleteWalletModal from '~/components/money/modals/DeleteWalletModal.vue';
 import DeleteCategoryModal from '~/components/money/modals/DeleteCategoryModal.vue';
+import EditProfileModal from '~/components/money/modals/EditProfileModal.vue';
+import ChangePasswordModal from '~/components/money/modals/ChangePasswordModal.vue';
 
 const route = useRoute();
 
@@ -21,6 +23,11 @@ const {
   showCategoryModal,
   showDeleteWalletModal,
   showDeleteCategoryModal,
+  showProfileModal,
+  showPasswordModal,
+  notificationsEnabled,
+  darkModeEnabled,
+  t,
   flashMessage,
   clearFlash,
   bootstrapping,
@@ -29,6 +36,15 @@ const {
 const isActive = (path: string) => route.path === path;
 
 let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => darkModeEnabled.value,
+  (enabled) => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.classList.toggle('theme-dark', enabled);
+  },
+  { immediate: true }
+);
 
 watch(
   () => flashMessage.value?.id,
@@ -41,12 +57,18 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') {
+    document.documentElement.classList.remove('theme-dark');
+  }
   if (flashTimer) clearTimeout(flashTimer);
 });
 </script>
 
 <template>
-  <div class="flex justify-center items-center min-h-[100dvh] bg-gray-100 font-sans md:items-stretch md:bg-gray-50 md:p-0">
+  <div
+    class="flex justify-center items-center min-h-[100dvh] bg-gray-100 font-sans md:items-stretch md:bg-gray-50 md:p-0"
+    :class="{ 'theme-dark': darkModeEnabled }"
+  >
     <div class="w-full min-h-[100dvh] flex flex-col overflow-hidden">
       <div
         class="flex-1 flex flex-col relative h-full overflow-hidden w-full max-w-md mx-auto md:max-w-4xl md:mx-auto bg-white md:bg-gray-50 shadow-2xl md:shadow-none"
@@ -55,7 +77,7 @@ onBeforeUnmount(() => {
           <div class="mx-auto max-w-md md:max-w-4xl px-4 md:px-8 pt-3">
             <div class="bg-white/95 border border-gray-200 rounded-2xl px-4 py-2 shadow-lg flex items-center gap-2 text-xs text-slate-600">
               <i class="fas fa-spinner fa-spin text-lime-500"></i>
-              <span>Memuat data...</span>
+              <span>{{ t('loading') }}</span>
             </div>
           </div>
         </div>
@@ -85,7 +107,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="px-6 pt-10 pb-4 bg-white md:bg-gray-50 flex justify-between items-center z-10 relative md:pt-8 md:px-8">
           <div>
-            <p class="text-gray-500 text-sm">Selamat Pagi,</p>
+            <p class="text-gray-500 text-sm">{{ t('greeting') }}</p>
             <h2 class="text-xl font-bold text-slate-900">{{ displayName }}</h2>
           </div>
 
@@ -93,10 +115,11 @@ onBeforeUnmount(() => {
             <button
               @click="toggleNotifications"
               class="p-2 bg-gray-50 md:bg-white rounded-full border border-gray-100 relative hover:bg-gray-100 transition-colors shadow-sm"
+              :class="!notificationsEnabled ? 'opacity-60 cursor-not-allowed' : ''"
             >
               <i class="fas fa-bell text-slate-900"></i>
               <div
-                v-if="hasUnread"
+                v-if="hasUnread && notificationsEnabled"
                 class="absolute top-2 right-2 w-2 h-2 bg-lime-500 rounded-full border-2 border-white"
               ></div>
             </button>
@@ -107,12 +130,12 @@ onBeforeUnmount(() => {
                 class="absolute top-12 right-0 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-fade-in origin-top-right"
               >
                 <div class="p-4 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
-                  <h3 class="font-bold text-slate-900">Notifikasi</h3>
+                  <h3 class="font-bold text-slate-900">{{ t('notifications') }}</h3>
                   <button
                     class="text-xs text-lime-600 font-bold hover:text-lime-700"
                     @click="markAllNotificationsRead"
                   >
-                    Tandai Dibaca
+                    {{ t('markAllRead') }}
                   </button>
                 </div>
                 <div class="max-h-[350px] overflow-y-auto scrollbar-hide">
@@ -141,7 +164,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <div class="p-3 bg-gray-50 text-center">
-                  <button class="text-xs font-bold text-slate-500 hover:text-slate-900">Lihat Semua</button>
+                  <button class="text-xs font-bold text-slate-500 hover:text-slate-900">{{ t('viewAll') }}</button>
                 </div>
               </div>
             </div>
@@ -165,7 +188,7 @@ onBeforeUnmount(() => {
           <div
             class="mx-auto max-w-md md:max-w-4xl px-4 md:px-8"
           >
-            <div class="bg-slate-900 rounded-2xl px-2 py-3 flex justify-between items-center shadow-2xl">
+            <div class="bg-slate-900 rounded-2xl px-2 py-3 flex justify-between items-center shadow-2xl mm-navbar">
               <div class="flex-1 flex justify-around">
                 <NuxtLink
                   to="/"
@@ -173,7 +196,7 @@ onBeforeUnmount(() => {
                   :class="isActive('/') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
                 >
                   <i class="fas fa-home text-lg"></i>
-                  <span class="text-[10px] font-bold">Beranda</span>
+                  <span class="text-[10px] font-bold">{{ t('home') }}</span>
                 </NuxtLink>
                 <NuxtLink
                   to="/analytics"
@@ -181,7 +204,7 @@ onBeforeUnmount(() => {
                   :class="isActive('/analytics') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
                 >
                   <i class="fas fa-chart-pie text-lg"></i>
-                  <span class="text-[10px] font-bold">Analitik</span>
+                  <span class="text-[10px] font-bold">{{ t('analytics') }}</span>
                 </NuxtLink>
               </div>
 
@@ -194,7 +217,7 @@ onBeforeUnmount(() => {
                   :class="isActive('/master') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
                 >
                   <i class="fas fa-database text-lg"></i>
-                  <span class="text-[10px] font-bold">Master</span>
+                  <span class="text-[10px] font-bold">{{ t('master') }}</span>
                 </NuxtLink>
                 <NuxtLink
                   to="/profile"
@@ -202,7 +225,7 @@ onBeforeUnmount(() => {
                   :class="isActive('/profile') ? 'text-lime-400' : 'text-gray-400 hover:text-white'"
                 >
                   <i class="fas fa-user text-lg"></i>
-                  <span class="text-[10px] font-bold">Profil</span>
+                  <span class="text-[10px] font-bold">{{ t('profile') }}</span>
                 </NuxtLink>
               </div>
             </div>
@@ -214,6 +237,8 @@ onBeforeUnmount(() => {
         <CategoryModal v-if="showCategoryModal" />
         <DeleteWalletModal v-if="showDeleteWalletModal" />
         <DeleteCategoryModal v-if="showDeleteCategoryModal" />
+        <EditProfileModal v-if="showProfileModal" />
+        <ChangePasswordModal v-if="showPasswordModal" />
       </div>
     </div>
   </div>

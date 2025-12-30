@@ -3,6 +3,8 @@ import { computed } from 'vue';
 type NotificationType = 'success' | 'warning' | 'info' | 'alert';
 type WalletType = 'Cash' | 'Bank' | 'E-Wallet';
 type TransactionType = 'expense' | 'income';
+type CurrencyCode = 'IDR' | 'USD';
+type LanguageCode = 'id' | 'en';
 type DbWalletType = 'CASH' | 'BANK' | 'WALLET';
 type DbCategoryType = 'INCOME' | 'EXPENSE';
 type FlashType = 'success' | 'error' | 'info';
@@ -11,6 +13,10 @@ interface UserInfo {
   id: string;
   email: string;
   name?: string | null;
+  notificationsEnabled?: boolean | null;
+  darkMode?: boolean | null;
+  currency?: CurrencyCode | null;
+  language?: LanguageCode | null;
 }
 
 interface NotificationItem {
@@ -83,6 +89,29 @@ interface CategoryFormState {
   name: string;
   type: TransactionType;
   icon: string;
+}
+
+interface ProfileFormState {
+  name: string;
+}
+
+interface PasswordFormState {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+interface UserPreferences {
+  notificationsEnabled: boolean;
+  darkMode: boolean;
+  currency: CurrencyCode;
+  language: LanguageCode;
+}
+
+interface ExchangeRatesState {
+  base: string;
+  rates: Record<string, number>;
+  updatedAt: number;
 }
 
 interface BootstrapPayload {
@@ -190,6 +219,377 @@ export const useMoneyManager = () => {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   });
 
+  const notificationsEnabled = computed(
+    () => currentUser.value?.notificationsEnabled ?? true
+  );
+  const darkModeEnabled = computed(() => currentUser.value?.darkMode ?? false);
+  const preferredCurrency = computed<CurrencyCode>(() =>
+    currentUser.value?.currency === 'USD' ? 'USD' : 'IDR'
+  );
+  const preferredLanguage = computed<LanguageCode>(() =>
+    currentUser.value?.language === 'en' ? 'en' : 'id'
+  );
+  const preferredLocale = computed(() => (preferredLanguage.value === 'en' ? 'en-US' : 'id-ID'));
+  const exchangeRates = useState<ExchangeRatesState>('mm-exchangeRates', () => ({
+    base: 'IDR',
+    rates: { IDR: 1, USD: 1 / 15500 },
+    updatedAt: 0,
+  }));
+  const exchangeRateTtlMs = 1000 * 60 * 60;
+
+  const loadExchangeRates = async () => {
+    if (process.server) return;
+    const now = Date.now();
+    if (exchangeRates.value.updatedAt && now - exchangeRates.value.updatedAt < exchangeRateTtlMs) {
+      return;
+    }
+
+    try {
+      const data = await $fetch<{ base?: string; rates?: Record<string, number> }>(
+        '/api/exchange-rates'
+      );
+      if (data?.rates) {
+        exchangeRates.value = {
+          base: data.base || 'IDR',
+          rates: data.rates,
+          updatedAt: now,
+        };
+      }
+    } catch (error) {
+      if (preferredCurrency.value !== 'IDR') {
+        setFlash(t('rateUnavailable'), 'info');
+      }
+    }
+  };
+
+  const resolveCurrencyRate = (currency: CurrencyCode) => {
+    if (currency === 'IDR') return 1;
+    const rates = exchangeRates.value.rates || {};
+    if (exchangeRates.value.base === 'IDR') {
+      return typeof rates[currency] === 'number' ? rates[currency] : 1 / 15500;
+    }
+
+    const rateToCurrency = rates[currency];
+    const rateToIdr = rates['IDR'];
+    if (typeof rateToCurrency === 'number' && typeof rateToIdr === 'number' && rateToIdr > 0) {
+      return rateToCurrency / rateToIdr;
+    }
+    return 1 / 15500;
+  };
+
+  const convertToPreferredCurrency = (amount: number) =>
+    amount * resolveCurrencyRate(preferredCurrency.value);
+
+  const translations = {
+    id: {
+      preferences: 'Preferensi',
+      notifications: 'Notifikasi',
+      notificationsOff: 'Notifikasi sedang dimatikan.',
+      darkMode: 'Mode Gelap',
+      currency: 'Mata Uang',
+      language: 'Bahasa',
+      indonesian: 'Indonesia',
+      english: 'Inggris',
+      greeting: 'Selamat Pagi,',
+      loading: 'Memuat data...',
+      markAllRead: 'Tandai Dibaca',
+      viewAll: 'Lihat Semua',
+      home: 'Beranda',
+      analytics: 'Analitik',
+      master: 'Master',
+      profile: 'Profil',
+      totalBalance: 'Total Saldo Anda',
+      totalAssets: 'Total Aset',
+      income: 'Pemasukan',
+      expense: 'Pengeluaran',
+      incoming: 'Masuk',
+      outgoing: 'Keluar',
+      addTransaction: 'Tambah Transaksi',
+      productName: 'Nama Produk',
+      productExample: 'Contoh: Nasi Padang',
+      selectCategory: 'Pilih kategori',
+      quantity: 'Jml',
+      price: 'Harga',
+      usePromo: 'Gunakan Promo',
+      promoTypeLabel: 'Tipe Promo',
+      promoPercent: 'Diskon (%)',
+      promoNominal: 'Diskon Nominal',
+      promoBuyXGetY: 'Buy X Get Y',
+      discountNominalLabel: 'Diskon Nominal',
+      buyXLabel: 'Buy X',
+      getYLabel: 'Get Y',
+      insufficientFunds: 'Sumber dana yang anda pilih tidak memiliki saldo yang cukup.',
+      finalTotal: 'Total Akhir',
+      incomeExample: 'Contoh: Bonus Tahunan',
+      amountLabel: 'Jumlah',
+      saveTransaction: 'Simpan Transaksi',
+      editWallet: 'Edit Dompet',
+      walletNameLabel: 'Nama Dompet',
+      walletExample: 'Contoh: Tabungan Liburan',
+      currentBalance: 'Saldo Saat Ini',
+      addBalanceLabel: 'Tambah Saldo',
+      initialBalanceLabel: 'Saldo Awal (Opsional)',
+      emptyIfNoAdd: 'Kosongkan jika tidak menambah saldo.',
+      emptyIfZero: 'Kosongkan jika 0.',
+      saveChanges: 'Simpan Perubahan',
+      createWallet: 'Buat Dompet',
+      editCategory: 'Edit Kategori',
+      categoryNameLabel: 'Nama Kategori',
+      categoryExample: 'Contoh: Hiburan, Bonus',
+      saveCategory: 'Simpan Kategori',
+      deleteCategory: 'Hapus Kategori',
+      deleteWarning: 'Tindakan ini tidak bisa dibatalkan.',
+      deleteWalletItemLabel: 'Dompet yang akan dihapus',
+      deleteCategoryItemLabel: 'Kategori yang akan dihapus',
+      deleteNote: 'Transaksi terkait tetap tersimpan.',
+      cancel: 'Batal',
+      deleteAction: 'Hapus',
+      emailLabel: 'Email',
+      currentPassword: 'Password Lama',
+      newPassword: 'Password Baru',
+      confirmPassword: 'Konfirmasi Password Baru',
+      savePassword: 'Simpan Password',
+      weeklyCashFlow: 'Arus Kas Mingguan',
+      transactionsThisMonth: 'Transaksi Bulan Ini',
+      noTransactionsThisMonth: 'Belum ada transaksi di bulan ini.',
+      noTransactionsThisWeek: 'Tidak ada transaksi pada minggu ini.',
+      weekShort: 'Mg {week}',
+      weekRange: 'Minggu {week} ({start}-{end})',
+      weeklyTooltipIncome: 'Masuk {count} transaksi',
+      weeklyTooltipExpense: 'Keluar {count} transaksi',
+      weeklyDetailTitle: 'Detail Minggu {week} - {type}',
+      weeklyRangeLabel: 'Rentang {start}-{end} bulan ini',
+      detailTransactions: 'Detail Transaksi',
+      close: 'Tutup',
+      type: 'Tipe',
+      date: 'Tanggal',
+      incomeName: 'Nama Pemasukan',
+      name: 'Nama',
+      categoryLabel: 'Kategori',
+      walletIn: 'Masuk ke Dompet',
+      amount: 'Jumlah',
+      note: 'Keterangan',
+      nominal: 'Nominal',
+      unitPrice: 'Satuan',
+      promo: 'Promo',
+      discountPercent: 'Diskon {value}%',
+      discountNominal: 'Diskon {value}',
+      buyXGetY: 'Beli {buy} Gratis {get}',
+      sourceWallet: 'Sumber Dana',
+      transactionsCount: '{count} transaksi',
+      monthSummary: 'Ringkasan Bulan Ini',
+      monthSummarySubtitle: 'Analisis pemasukan dan pengeluaran',
+      net: 'Selisih',
+      comparisonTitle: 'Perbandingan Bulan Ini',
+      comparisonSubtitle: 'Pemasukan vs Pengeluaran',
+      totalLabel: 'Total',
+      transactionsDetailTitle: 'Detail Transaksi Bulan Ini',
+      transactionsDetailSubtitle: 'Menampilkan 5 transaksi terbaru dengan pagination',
+      tableDate: 'Tanggal',
+      tableName: 'Nama',
+      tableCategory: 'Kategori',
+      tableType: 'Tipe',
+      tableWallet: 'Dompet',
+      tableAmount: 'Nominal',
+      noTransactionsTable: 'Tidak ada transaksi di bulan ini.',
+      showingRange: 'Menampilkan {start}-{end} dari {total}',
+      pageLabel: 'Hal {current} / {total}',
+      prev: 'Sebelumnya',
+      next: 'Berikutnya',
+      masterData: 'Master Data',
+      wallet: 'Dompet',
+      category: 'Kategori',
+      addWallet: 'Tambah Dompet',
+      addCategory: 'Tambah Kategori',
+      categoryList: 'Daftar Kategori',
+      categoryListSubtitle: 'Icon dan tipe kategori untuk transaksi.',
+      icon: 'Icon',
+      typeLabel: 'Tipe',
+      actions: 'Aksi',
+      edit: 'Edit',
+      delete: 'Hapus',
+      deleteWallet: 'Hapus Dompet',
+      noCategories: 'Belum ada kategori.',
+      showingCategories: 'Menampilkan {start}-{end} dari {total} kategori',
+      account: 'Akun',
+      editProfile: 'Edit Profil',
+      changePassword: 'Ganti Password',
+      dataSecurity: 'Data & Keamanan',
+      exportData: 'Ekspor Data (CSV)',
+      privacyPolicy: 'Kebijakan Privasi',
+      helpCenter: 'Pusat Bantuan',
+      deleteAccount: 'Hapus Akun',
+      logout: 'Keluar',
+      appVersion: 'Versi Aplikasi {version} - MoneyKu Inc.',
+      loadFailed: 'Gagal memuat data. Coba muat ulang.',
+      rateUnavailable: 'Gagal mengambil kurs terbaru, memakai kurs cadangan.',
+      incomeBadge: 'Pemasukan',
+      expenseBadge: 'Pengeluaran',
+      downloadCsv: 'Excel (.csv)',
+      downloadPdf: 'PDF / Print',
+    },
+    en: {
+      preferences: 'Preferences',
+      notifications: 'Notifications',
+      notificationsOff: 'Notifications are turned off.',
+      darkMode: 'Dark Mode',
+      currency: 'Currency',
+      language: 'Language',
+      indonesian: 'Indonesian',
+      english: 'English',
+      greeting: 'Good Morning,',
+      loading: 'Loading data...',
+      markAllRead: 'Mark all read',
+      viewAll: 'View all',
+      home: 'Home',
+      analytics: 'Analytics',
+      master: 'Master',
+      profile: 'Profile',
+      totalBalance: 'Total Balance',
+      totalAssets: 'Total Assets',
+      income: 'Income',
+      expense: 'Expense',
+      incoming: 'In',
+      outgoing: 'Out',
+      addTransaction: 'Add Transaction',
+      productName: 'Product Name',
+      productExample: 'Example: Lunch',
+      selectCategory: 'Select category',
+      quantity: 'Qty',
+      price: 'Price',
+      usePromo: 'Use Promo',
+      promoTypeLabel: 'Promo Type',
+      promoPercent: 'Discount (%)',
+      promoNominal: 'Fixed Discount',
+      promoBuyXGetY: 'Buy X Get Y',
+      discountNominalLabel: 'Fixed Discount',
+      buyXLabel: 'Buy X',
+      getYLabel: 'Get Y',
+      insufficientFunds: 'The selected wallet does not have enough balance.',
+      finalTotal: 'Final Total',
+      incomeExample: 'Example: Annual bonus',
+      amountLabel: 'Amount',
+      saveTransaction: 'Save Transaction',
+      editWallet: 'Edit Wallet',
+      walletNameLabel: 'Wallet Name',
+      walletExample: 'Example: Holiday Savings',
+      currentBalance: 'Current Balance',
+      addBalanceLabel: 'Add Balance',
+      initialBalanceLabel: 'Initial Balance (Optional)',
+      emptyIfNoAdd: 'Leave empty if no balance added.',
+      emptyIfZero: 'Leave empty if 0.',
+      saveChanges: 'Save Changes',
+      createWallet: 'Create Wallet',
+      editCategory: 'Edit Category',
+      categoryNameLabel: 'Category Name',
+      categoryExample: 'Example: Entertainment, Bonus',
+      saveCategory: 'Save Category',
+      deleteCategory: 'Delete Category',
+      deleteWarning: 'This action cannot be undone.',
+      deleteWalletItemLabel: 'Wallet to be deleted',
+      deleteCategoryItemLabel: 'Category to be deleted',
+      deleteNote: 'Related transactions will remain.',
+      cancel: 'Cancel',
+      deleteAction: 'Delete',
+      emailLabel: 'Email',
+      currentPassword: 'Current Password',
+      newPassword: 'New Password',
+      confirmPassword: 'Confirm New Password',
+      savePassword: 'Save Password',
+      weeklyCashFlow: 'Weekly Cash Flow',
+      transactionsThisMonth: 'Transactions This Month',
+      noTransactionsThisMonth: 'No transactions this month.',
+      noTransactionsThisWeek: 'No transactions this week.',
+      weekShort: 'Wk {week}',
+      weekRange: 'Week {week} ({start}-{end})',
+      weeklyTooltipIncome: 'In {count} transactions',
+      weeklyTooltipExpense: 'Out {count} transactions',
+      weeklyDetailTitle: 'Week {week} Details - {type}',
+      weeklyRangeLabel: 'Range {start}-{end} this month',
+      detailTransactions: 'Transaction Details',
+      close: 'Close',
+      type: 'Type',
+      date: 'Date',
+      incomeName: 'Income Name',
+      name: 'Name',
+      categoryLabel: 'Category',
+      walletIn: 'To Wallet',
+      amount: 'Amount',
+      note: 'Note',
+      nominal: 'Amount',
+      unitPrice: 'Unit Price',
+      promo: 'Promo',
+      discountPercent: 'Discount {value}%',
+      discountNominal: 'Discount {value}',
+      buyXGetY: 'Buy {buy} Get {get}',
+      sourceWallet: 'Source Wallet',
+      transactionsCount: '{count} transactions',
+      monthSummary: 'This Month Summary',
+      monthSummarySubtitle: 'Income and expense analysis',
+      net: 'Net',
+      comparisonTitle: 'This Month Comparison',
+      comparisonSubtitle: 'Income vs Expense',
+      totalLabel: 'Total',
+      transactionsDetailTitle: 'This Month Transaction Details',
+      transactionsDetailSubtitle: 'Showing latest 5 transactions with pagination',
+      tableDate: 'Date',
+      tableName: 'Name',
+      tableCategory: 'Category',
+      tableType: 'Type',
+      tableWallet: 'Wallet',
+      tableAmount: 'Amount',
+      noTransactionsTable: 'No transactions this month.',
+      showingRange: 'Showing {start}-{end} of {total}',
+      pageLabel: 'Page {current} / {total}',
+      prev: 'Previous',
+      next: 'Next',
+      masterData: 'Master Data',
+      wallet: 'Wallet',
+      category: 'Category',
+      addWallet: 'Add Wallet',
+      addCategory: 'Add Category',
+      categoryList: 'Category List',
+      categoryListSubtitle: 'Icons and types for transactions.',
+      icon: 'Icon',
+      typeLabel: 'Type',
+      actions: 'Actions',
+      edit: 'Edit',
+      delete: 'Delete',
+      deleteWallet: 'Delete Wallet',
+      noCategories: 'No categories yet.',
+      showingCategories: 'Showing {start}-{end} of {total} categories',
+      account: 'Account',
+      editProfile: 'Edit Profile',
+      changePassword: 'Change Password',
+      dataSecurity: 'Data & Security',
+      exportData: 'Export Data (CSV)',
+      privacyPolicy: 'Privacy Policy',
+      helpCenter: 'Help Center',
+      deleteAccount: 'Delete Account',
+      logout: 'Sign Out',
+      appVersion: 'App Version {version} - MoneyKu Inc.',
+      loadFailed: 'Failed to load data. Please refresh.',
+      rateUnavailable: 'Unable to fetch latest rates, using fallback.',
+      incomeBadge: 'Income',
+      expenseBadge: 'Expense',
+      downloadCsv: 'Excel (.csv)',
+      downloadPdf: 'PDF / Print',
+    },
+  } as const;
+
+  type TranslationKey = keyof typeof translations.id;
+
+  const t = (key: TranslationKey, params?: Record<string, string | number>) => {
+    const lang = preferredLanguage.value;
+    let text = translations[lang]?.[key] || translations.id[key] || key;
+    if (params) {
+      Object.entries(params).forEach(([param, value]) => {
+        text = text.replace(new RegExp(`\\{${param}\\}`, 'g'), String(value));
+      });
+    }
+    return text;
+  };
+
   const notificationStyles: Record<NotificationType, { icon: string; bg: string; color: string }> = {
     success: { icon: 'fa-check-circle', bg: 'bg-green-100', color: 'text-green-600' },
     warning: { icon: 'fa-triangle-exclamation', bg: 'bg-yellow-100', color: 'text-yellow-600' },
@@ -243,6 +643,8 @@ export const useMoneyManager = () => {
   const showCategoryModal = useState<boolean>('mm-showCategoryModal', () => false);
   const showDeleteWalletModal = useState<boolean>('mm-showDeleteWalletModal', () => false);
   const showDeleteCategoryModal = useState<boolean>('mm-showDeleteCategoryModal', () => false);
+  const showProfileModal = useState<boolean>('mm-showProfileModal', () => false);
+  const showPasswordModal = useState<boolean>('mm-showPasswordModal', () => false);
 
   const showNotifications = useState<boolean>('mm-showNotifications', () => false);
   const hasUnread = useState<boolean>('mm-hasUnread', () => true);
@@ -251,6 +653,12 @@ export const useMoneyManager = () => {
   const walletToDelete = useState<WalletItem | null>('mm-walletToDelete', () => null);
   const editingCategory = useState<CategoryItem | null>('mm-editingCategory', () => null);
   const categoryToDelete = useState<CategoryItem | null>('mm-categoryToDelete', () => null);
+  const profileForm = useState<ProfileFormState>('mm-profileForm', () => ({ name: '' }));
+  const passwordForm = useState<PasswordFormState>('mm-passwordForm', () => ({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  }));
 
   const statsDate = useState<number>('mm-statsDate', () => {
     const now = new Date();
@@ -301,22 +709,34 @@ export const useMoneyManager = () => {
     walletFormData.value = { name: '', type: 'Cash', balance: '' };
   };
 
-  const formatRupiah = (number: number) =>
-    new Intl.NumberFormat('id-ID', {
+  const formatRupiah = (number: number) => {
+    const currency = preferredCurrency.value;
+    const locale = preferredLocale.value;
+    const fractionDigits = currency === 'IDR' ? 0 : 2;
+    const converted = convertToPreferredCurrency(number);
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(number);
+      currency,
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(converted);
+  };
 
   const formatShortRupiah = (number: number) => {
-    const abs = Math.abs(number);
-    if (abs >= 1000000) return `${(number / 1000000).toFixed(1)}jt`;
-    if (abs >= 1000) return `${(number / 1000).toFixed(0)}rb`;
-    return number.toString();
+    const converted = convertToPreferredCurrency(number);
+    const abs = Math.abs(converted);
+    const isEnglish = preferredLanguage.value === 'en';
+    if (abs >= 1000000) return `${(converted / 1000000).toFixed(1)}${isEnglish ? 'M' : 'jt'}`;
+    if (abs >= 1000) return `${(converted / 1000).toFixed(0)}${isEnglish ? 'K' : 'rb'}`;
+    if (preferredCurrency.value === 'USD') return converted.toFixed(2);
+    return Math.round(converted).toString();
   };
 
   const toggleNotifications = () => {
+    if (!notificationsEnabled.value) {
+      setFlash(t('notificationsOff'), 'info');
+      return;
+    }
     showNotifications.value = !showNotifications.value;
     if (showNotifications.value) {
       hasUnread.value = false;
@@ -324,19 +744,9 @@ export const useMoneyManager = () => {
   };
 
   const markAllNotificationsRead = () => {
+    if (!notificationsEnabled.value) return;
     notifications.value = notifications.value.map((notif) => ({ ...notif, read: true }));
     hasUnread.value = false;
-  };
-
-  const handleApiError = (error: any, fallback: string) => {
-    const message =
-      error?.data?.statusMessage ||
-      error?.data?.message ||
-      error?.message ||
-      fallback;
-    if (typeof window !== 'undefined') {
-      alert(message);
-    }
   };
 
   const setFlash = (message: string, type: FlashType = 'success') => {
@@ -345,6 +755,19 @@ export const useMoneyManager = () => {
 
   const clearFlash = () => {
     flashMessage.value = null;
+  };
+
+  const resolveErrorMessage = (error: any, fallback: string) =>
+    error?.data?.statusMessage ||
+    error?.data?.message ||
+    error?.message ||
+    fallback;
+
+  const handleApiError = (error: any, fallback: string) => {
+    const message = resolveErrorMessage(error, fallback);
+    if (typeof window !== 'undefined') {
+      alert(message);
+    }
   };
 
   const fetchBootstrap = async () => {
@@ -358,6 +781,9 @@ export const useMoneyManager = () => {
       });
 
       currentUser.value = data.user;
+      if (data.user?.currency && data.user.currency !== 'IDR') {
+        void loadExchangeRates();
+      }
 
       const categoryItems = (data.categories || []).map((cat) => ({
         id: cat.id,
@@ -428,7 +854,7 @@ export const useMoneyManager = () => {
       incomeCategories.value = [];
       transactions.value = [];
       bootstrapped.value = false;
-      setFlash('Gagal memuat data. Coba muat ulang.', 'error');
+      setFlash(t('loadFailed'), 'error');
     } finally {
       bootstrapping.value = false;
     }
@@ -446,6 +872,125 @@ export const useMoneyManager = () => {
     incomeCategories.value = [];
     transactions.value = [];
     bootstrapped.value = false;
+  };
+
+  const updatePreferences = async (updates: Partial<UserPreferences>) => {
+    if (!currentUser.value) return;
+    const previous = { ...currentUser.value };
+    currentUser.value = { ...currentUser.value, ...updates };
+
+    if (updates.notificationsEnabled === false) {
+      showNotifications.value = false;
+      hasUnread.value = false;
+    }
+
+    try {
+      const response = await $fetch<{ user: UserInfo }>('/api/user/preferences', {
+        method: 'PUT',
+        body: updates,
+      });
+      currentUser.value = response.user;
+    } catch (error) {
+      currentUser.value = previous;
+      setFlash(resolveErrorMessage(error, 'Gagal memperbarui preferensi.'), 'error');
+    }
+  };
+
+  const toggleNotificationsPreference = () =>
+    updatePreferences({ notificationsEnabled: !notificationsEnabled.value });
+
+  const toggleDarkModePreference = () =>
+    updatePreferences({ darkMode: !darkModeEnabled.value });
+
+  const setCurrencyPreference = (currency: CurrencyCode) => {
+    if (currency === preferredCurrency.value) return;
+    if (currency !== 'IDR') {
+      void loadExchangeRates();
+    }
+    updatePreferences({ currency });
+  };
+
+  const setLanguagePreference = (language: LanguageCode) => {
+    if (language === preferredLanguage.value) return;
+    updatePreferences({ language });
+  };
+
+  const currencyOptions = computed(() => [
+    { value: 'IDR' as CurrencyCode, label: 'IDR (Rupiah)' },
+    { value: 'USD' as CurrencyCode, label: preferredLanguage.value === 'en' ? 'USD (US Dollar)' : 'USD (Dolar AS)' },
+  ]);
+
+  const languageOptions = computed(() => [
+    { value: 'id' as LanguageCode, label: t('indonesian') },
+    { value: 'en' as LanguageCode, label: t('english') },
+  ]);
+
+  const openProfileModal = () => {
+    profileForm.value.name = currentUser.value?.name?.trim() || displayName.value;
+    showProfileModal.value = true;
+  };
+
+  const closeProfileModal = () => {
+    showProfileModal.value = false;
+  };
+
+  const handleSaveProfile = async () => {
+    const name = profileForm.value.name.trim();
+    if (!name) {
+      setFlash('Nama wajib diisi.', 'error');
+      return;
+    }
+    try {
+      const response = await $fetch<{ user: UserInfo }>('/api/user', {
+        method: 'PUT',
+        body: { name },
+      });
+      currentUser.value = response.user;
+      setFlash('Profil berhasil diperbarui.', 'success');
+      closeProfileModal();
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, 'Gagal memperbarui profil.'), 'error');
+    }
+  };
+
+  const openPasswordModal = () => {
+    passwordForm.value = { currentPassword: '', newPassword: '', confirmPassword: '' };
+    showPasswordModal.value = true;
+  };
+
+  const closePasswordModal = () => {
+    showPasswordModal.value = false;
+  };
+
+  const handleChangePassword = async () => {
+    const currentPassword = passwordForm.value.currentPassword;
+    const newPassword = passwordForm.value.newPassword;
+    const confirmPassword = passwordForm.value.confirmPassword;
+
+    if (!currentPassword || !newPassword) {
+      setFlash('Password wajib diisi.', 'error');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setFlash('Password minimal 6 karakter.', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setFlash('Konfirmasi password tidak cocok.', 'error');
+      return;
+    }
+
+    try {
+      await $fetch('/api/auth/password', {
+        method: 'PUT',
+        body: { currentPassword, newPassword },
+      });
+      setFlash('Password berhasil diperbarui.', 'success');
+      closePasswordModal();
+      passwordForm.value = { currentPassword: '', newPassword: '', confirmPassword: '' };
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, 'Gagal memperbarui password.'), 'error');
+    }
   };
 
   const handleOpenAddWallet = () => {
@@ -875,7 +1420,10 @@ export const useMoneyManager = () => {
   const totalMonthNet = computed(() => totalMonthIncome.value - totalMonthExpense.value);
 
   const monthName = computed(() =>
-    new Date(statsDate.value).toLocaleString('id-ID', { month: 'long', year: 'numeric' })
+    new Date(statsDate.value).toLocaleString(preferredLocale.value, {
+      month: 'long',
+      year: 'numeric',
+    })
   );
 
   const monthInputValue = computed(() => {
@@ -945,6 +1493,13 @@ export const useMoneyManager = () => {
     displayName,
     displayEmail,
     initials,
+    notificationsEnabled,
+    darkModeEnabled,
+    preferredCurrency,
+    preferredLanguage,
+    currencyOptions,
+    languageOptions,
+    t,
     notifications,
     notificationStyles,
     bootstrapping,
@@ -958,12 +1513,16 @@ export const useMoneyManager = () => {
     showCategoryModal,
     showDeleteWalletModal,
     showDeleteCategoryModal,
+    showProfileModal,
+    showPasswordModal,
     showNotifications,
     hasUnread,
     editingWallet,
     walletToDelete,
     categoryToDelete,
     editingCategory,
+    profileForm,
+    passwordForm,
     formData,
     walletFormData,
     categoryForm,
@@ -976,6 +1535,16 @@ export const useMoneyManager = () => {
     refreshData,
     setFlash,
     clearFlash,
+    toggleNotificationsPreference,
+    toggleDarkModePreference,
+    setCurrencyPreference,
+    setLanguagePreference,
+    openProfileModal,
+    closeProfileModal,
+    handleSaveProfile,
+    openPasswordModal,
+    closePasswordModal,
+    handleChangePassword,
     handleOpenAddWallet,
     handleOpenEditWallet,
     handleSaveWallet,

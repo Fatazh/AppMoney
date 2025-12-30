@@ -38,3 +38,97 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.theme-dark {
+  color-scheme: dark;
+}
+.theme-dark .bg-white {
+  background-color: #0f172a;
+}
+.theme-dark .bg-gray-50 {
+  background-color: #0b1220;
+}
+.theme-dark .bg-gray-100 {
+  background-color: #111827;
+}
+.theme-dark .bg-gray-200 {
+  background-color: #1f2937;
+}
+.theme-dark .bg-slate-50 {
+  background-color: #0b1220;
+}
+.theme-dark .bg-slate-100 {
+  background-color: #111827;
+}
+.theme-dark .border-gray-100 {
+  border-color: #1f2937;
+}
+.theme-dark .border-gray-200 {
+  border-color: #374151;
+}
+.theme-dark .border-gray-300 {
+  border-color: #4b5563;
+}
+.theme-dark .border-slate-100 {
+  border-color: #1f2937;
+}
+.theme-dark .text-slate-900 {
+  color: #f8fafc;
+}
+.theme-dark .text-slate-800 {
+  color: #e2e8f0;
+}
+.theme-dark .text-slate-700 {
+  color: #e2e8f0;
+}
+.theme-dark .text-slate-600 {
+  color: #cbd5f5;
+}
+.theme-dark .text-gray-500 {
+  color: #94a3b8;
+}
+.theme-dark .text-gray-400 {
+  color: #94a3b8;
+}
+.theme-dark .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.6);
+}
+.theme-dark .shadow-lg,
+.theme-dark .shadow-xl,
+.theme-dark .shadow-2xl {
+  box-shadow: 0 12px 32px -12px rgba(2, 6, 23, 0.8);
+}
+.theme-dark .hover\:bg-gray-50:hover {
+  background-color: #0b1220;
+}
+.theme-dark .hover\:bg-gray-100:hover {
+  background-color: #111827;
+}
+.theme-dark .hover\:bg-gray-200:hover {
+  background-color: #1f2937;
+}
+.theme-dark .hover\:bg-gray-50\/60:hover {
+  background-color: #111827;
+}
+.theme-dark .hover\:text-slate-700:hover,
+.theme-dark .hover\:text-slate-900:hover,
+.theme-dark .hover\:text-gray-500:hover {
+  color: #f8fafc;
+}
+.theme-dark .mm-expense-bar,
+.theme-dark .mm-expense-dot {
+  background-color: #e2e8f0;
+}
+.mm-navbar {
+  position: relative;
+}
+.theme-dark .mm-navbar::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: inherit;
+  background: radial-gradient(120% 180% at 50% -10%, rgba(163, 230, 53, 0.18) 0%, rgba(15, 23, 42, 0) 70%);
+  filter: blur(14px);
+  opacity: 0.7;
+  z-index: -1;
+  pointer-events: none;
+}

@@ -8,6 +8,10 @@ export default defineNuxtConfig({
     "~/assets/css/money-manager.css",
   ],
 
+  runtimeConfig: {
+    exchangeRateApiKey: process.env.EXCHANGE_RATE_API_KEY,
+  },
+
   nitro: {
     esbuild: {
       options: {

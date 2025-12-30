@@ -18,6 +18,10 @@ model User {
   name      String   @default("")
   email     String   @unique
   password  String
+  notificationsEnabled Boolean @default(true)
+  darkMode  Boolean @default(false)
+  currency  String   @default("IDR")
+  language  String   @default("id")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

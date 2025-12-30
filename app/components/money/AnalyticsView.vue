@@ -16,6 +16,7 @@ const {
   handleDownloadExcel,
   handlePrint,
   filteredTransactions,
+  t,
 } = useMoneyManager();
 
 const totalFlow = computed(() => totalMonthIncome.value + totalMonthExpense.value);
@@ -139,13 +140,13 @@ const closeTransactionDetail = () => {
 const formatPromo = (transaction: typeof selectedTransaction.value) => {
   if (!transaction?.promoType) return '-';
   if (transaction.promoType === 'PERCENT') {
-    return `Diskon ${transaction.promoValue ?? 0}%`;
+    return t('discountPercent', { value: transaction.promoValue ?? 0 });
   }
   if (transaction.promoType === 'FIXED') {
-    return `Diskon ${formatRupiah(transaction.promoValue ?? 0)}`;
+    return t('discountNominal', { value: formatRupiah(transaction.promoValue ?? 0) });
   }
   if (transaction.promoType === 'BUY_X_GET_Y') {
-    return `Buy ${transaction.promoBuyX ?? 0} Get ${transaction.promoGetY ?? 0}`;
+    return t('buyXGetY', { buy: transaction.promoBuyX ?? 0, get: transaction.promoGetY ?? 0 });
   }
   return '-';
 };
@@ -203,7 +204,7 @@ watch(totalPages, (value) => {
   <div class="animate-fade-in pb-32 md:pb-32 md:grid md:grid-cols-12 md:gap-6 md:h-full md:overflow-y-auto pt-6">
     <div class="md:col-span-8 flex flex-col">
       <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold text-slate-900">Analitik</h2>
+        <h2 class="text-2xl font-bold text-slate-900">{{ t('analytics') }}</h2>
         <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl p-1 relative">
           <button @click="changeMonth(-1)" class="p-1 hover:bg-gray-100 rounded-lg text-slate-600 z-10">
             <i class="fas fa-chevron-left"></i>
@@ -227,11 +228,11 @@ watch(totalPages, (value) => {
         <div class="flex flex-col gap-5 mb-6">
           <div class="flex items-start justify-between">
             <div>
-              <h3 class="font-bold text-slate-900">Ringkasan Bulan Ini</h3>
-              <p class="text-xs text-gray-400">Analisis pemasukan dan pengeluaran</p>
+              <h3 class="font-bold text-slate-900">{{ t('monthSummary') }}</h3>
+              <p class="text-xs text-gray-400">{{ t('monthSummarySubtitle') }}</p>
             </div>
             <div class="text-right">
-              <p class="text-xs text-gray-400">Selisih</p>
+              <p class="text-xs text-gray-400">{{ t('net') }}</p>
               <p
                 class="text-lg font-bold"
                 :class="totalMonthNet >= 0 ? 'text-lime-600' : 'text-red-500'"
@@ -242,11 +243,11 @@ watch(totalPages, (value) => {
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div class="rounded-2xl border border-lime-100 bg-lime-50 p-4">
-              <p class="text-xs font-semibold text-lime-700">Pemasukan</p>
+              <p class="text-xs font-semibold text-lime-700">{{ t('income') }}</p>
               <p class="text-lg font-bold text-lime-700 mt-1">{{ formatRupiah(totalMonthIncome) }}</p>
             </div>
             <div class="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <p class="text-xs font-semibold text-slate-500">Pengeluaran</p>
+              <p class="text-xs font-semibold text-slate-500">{{ t('expense') }}</p>
               <p class="text-lg font-bold text-slate-900 mt-1">{{ formatRupiah(totalMonthExpense) }}</p>
             </div>
           </div>
@@ -255,15 +256,15 @@ watch(totalPages, (value) => {
 
       <div class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm mb-8 order-2">
         <div class="flex justify-between items-center mb-4">
-          <h3 class="font-bold text-slate-900 text-sm">Arus Kas Mingguan</h3>
+          <h3 class="font-bold text-slate-900 text-sm">{{ t('weeklyCashFlow') }}</h3>
           <div class="flex gap-3">
             <div class="flex items-center gap-1">
               <div class="w-2 h-2 rounded-full bg-lime-400"></div>
-              <span class="text-[10px] text-gray-500">Masuk</span>
+              <span class="text-[10px] text-gray-500">{{ t('incoming') }}</span>
             </div>
             <div class="flex items-center gap-1">
-              <div class="w-2 h-2 rounded-full bg-slate-900"></div>
-              <span class="text-[10px] text-gray-500">Keluar</span>
+              <div class="w-2 h-2 rounded-full bg-slate-900 mm-expense-dot"></div>
+              <span class="text-[10px] text-gray-500">{{ t('outgoing') }}</span>
             </div>
           </div>
         </div>
@@ -280,10 +281,10 @@ watch(totalPages, (value) => {
                   class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block z-10"
                 >
                   <div class="bg-slate-800 text-white text-[10px] p-2 rounded-lg shadow-lg whitespace-nowrap">
-                    <p class="text-lime-400 font-bold">Masuk {{ d.income }} transaksi</p>
-                    <p class="text-white font-bold">Keluar {{ d.expense }} transaksi</p>
+                    <p class="text-lime-400 font-bold">{{ t('weeklyTooltipIncome', { count: d.income }) }}</p>
+                    <p class="text-white font-bold">{{ t('weeklyTooltipExpense', { count: d.expense }) }}</p>
                     <p class="text-gray-400 text-center mt-1 border-t border-gray-600 pt-1">
-                      Minggu {{ d.week }} ({{ d.startDay }}-{{ d.endDay }})
+                      {{ t('weekRange', { week: d.week, start: d.startDay, end: d.endDay }) }}
                     </p>
                   </div>
                 </div>
@@ -295,7 +296,7 @@ watch(totalPages, (value) => {
                   }"
                 ></div>
                 <div
-                  class="w-2 rounded-t-sm bg-slate-900 transition-all duration-500 hover:bg-slate-700"
+                  class="w-2 rounded-t-sm bg-slate-900 transition-all duration-500 hover:bg-slate-700 mm-expense-bar"
                   :style="{
                     height: `${(d.expense / weeklyChartSafe.maxVal) * 100}%`,
                     minHeight: d.expense > 0 ? '4px' : '0',
@@ -303,14 +304,14 @@ watch(totalPages, (value) => {
                 ></div>
               </div>
               <div class="flex flex-col items-center leading-tight">
-                <span class="text-[10px] text-gray-400 font-semibold">Mg {{ d.week }}</span>
+                <span class="text-[10px] text-gray-400 font-semibold">{{ t('weekShort', { week: d.week }) }}</span>
                 <span class="text-[9px] text-gray-300">{{ d.startDay }}-{{ d.endDay }}</span>
               </div>
             </div>
           </div>
         </div>
         <div v-else class="text-center py-8 text-gray-400 border border-dashed rounded-2xl border-gray-200">
-          <p>Belum ada transaksi di bulan ini.</p>
+          <p>{{ t('noTransactionsThisMonth') }}</p>
         </div>
       </div>
 
@@ -320,22 +321,22 @@ watch(totalPages, (value) => {
           class="flex-1 flex items-center justify-center gap-2 py-3 bg-green-50 text-green-700 border border-green-200 rounded-xl text-sm font-bold hover:bg-green-100 transition-colors"
         >
           <i class="fas fa-table"></i>
-          Excel (.csv)
+          {{ t('downloadCsv') }}
         </button>
         <button
           @click="handlePrint"
           class="flex-1 flex items-center justify-center gap-2 py-3 bg-red-50 text-red-700 border border-red-200 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors"
         >
           <i class="fas fa-file-lines"></i>
-          PDF / Print
+          {{ t('downloadPdf') }}
         </button>
       </div>
 
       <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm order-3 md:hidden">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h4 class="font-bold text-slate-900">Perbandingan Bulan Ini</h4>
-            <p class="text-xs text-gray-400">Pemasukan vs Pengeluaran</p>
+            <h4 class="font-bold text-slate-900">{{ t('comparisonTitle') }}</h4>
+            <p class="text-xs text-gray-400">{{ t('comparisonSubtitle') }}</p>
           </div>
           <span class="text-xs text-gray-400">{{ monthName }}</span>
         </div>
@@ -345,7 +346,7 @@ watch(totalPages, (value) => {
             <div
               class="absolute inset-5 rounded-full bg-white border border-gray-100 flex flex-col items-center justify-center"
             >
-              <span class="text-[10px] text-gray-400">Total</span>
+              <span class="text-[10px] text-gray-400">{{ t('totalLabel') }}</span>
               <span class="text-sm font-bold text-slate-900">{{ formatRupiah(totalFlow) }}</span>
             </div>
           </div>
@@ -354,7 +355,7 @@ watch(totalPages, (value) => {
           <div class="rounded-xl border border-lime-100 bg-lime-50 p-3">
             <div class="flex items-center gap-2">
               <div class="w-2 h-2 rounded-full bg-lime-400"></div>
-              <span class="text-xs font-semibold text-lime-700">Pemasukan</span>
+              <span class="text-xs font-semibold text-lime-700">{{ t('income') }}</span>
             </div>
             <p class="text-sm font-bold text-slate-900 mt-1">{{ formatRupiah(totalMonthIncome) }}</p>
             <p class="text-[10px] text-gray-400">{{ Math.round(incomePercent) }}%</p>
@@ -362,14 +363,14 @@ watch(totalPages, (value) => {
           <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
             <div class="flex items-center gap-2">
               <div class="w-2 h-2 rounded-full bg-slate-900"></div>
-              <span class="text-xs font-semibold text-slate-600">Pengeluaran</span>
+              <span class="text-xs font-semibold text-slate-600">{{ t('expense') }}</span>
             </div>
             <p class="text-sm font-bold text-slate-900 mt-1">{{ formatRupiah(totalMonthExpense) }}</p>
             <p class="text-[10px] text-gray-400">{{ Math.round(expensePercent) }}%</p>
           </div>
         </div>
         <div v-if="totalFlow === 0" class="text-center text-xs text-gray-400 mt-4">
-          Belum ada transaksi di bulan ini.
+          {{ t('noTransactionsThisMonth') }}
         </div>
       </div>
 
@@ -379,27 +380,27 @@ watch(totalPages, (value) => {
       >
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h3 class="font-bold text-slate-900">Detail Transaksi Bulan Ini</h3>
-            <p class="text-xs text-gray-400">Menampilkan 5 transaksi terbaru dengan pagination</p>
+            <h3 class="font-bold text-slate-900">{{ t('transactionsDetailTitle') }}</h3>
+            <p class="text-xs text-gray-400">{{ t('transactionsDetailSubtitle') }}</p>
           </div>
-          <span class="text-xs text-gray-400">{{ sortedTransactions.length }} transaksi</span>
+          <span class="text-xs text-gray-400">{{ t('transactionsCount', { count: sortedTransactions.length }) }}</span>
         </div>
         <div class="overflow-x-auto">
           <table class="min-w-full text-left">
             <thead>
               <tr class="text-[10px] uppercase tracking-widest text-gray-400 border-b border-gray-100">
-                <th class="py-3 px-3">Tanggal</th>
-                <th class="py-3 px-3">Nama</th>
-                <th class="py-3 px-3">Kategori</th>
-                <th class="py-3 px-3">Tipe</th>
-                <th class="py-3 px-3">Dompet</th>
-                <th class="py-3 px-3 text-right">Nominal</th>
+                <th class="py-3 px-3">{{ t('tableDate') }}</th>
+                <th class="py-3 px-3">{{ t('tableName') }}</th>
+                <th class="py-3 px-3">{{ t('tableCategory') }}</th>
+                <th class="py-3 px-3">{{ t('tableType') }}</th>
+                <th class="py-3 px-3">{{ t('tableWallet') }}</th>
+                <th class="py-3 px-3 text-right">{{ t('tableAmount') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="pagedTransactions.length === 0">
                 <td colspan="6" class="py-6 text-center text-sm text-gray-400">
-                  Tidak ada transaksi di bulan ini.
+                  {{ t('noTransactionsTable') }}
                 </td>
               </tr>
               <tr
@@ -422,13 +423,13 @@ watch(totalPages, (value) => {
                 </td>
                 <td class="py-3 px-3 text-xs text-gray-500">{{ t.category }}</td>
                 <td class="py-3 px-3">
-                  <span
-                    class="text-[10px] font-bold px-2.5 py-1 rounded-full"
-                    :class="t.type === 'income' ? 'bg-lime-50 text-lime-700' : 'bg-red-50 text-red-600'"
-                  >
-                    {{ t.type === 'income' ? 'Pemasukan' : 'Pengeluaran' }}
-                  </span>
-                </td>
+                    <span
+                      class="text-[10px] font-bold px-2.5 py-1 rounded-full"
+                      :class="t.type === 'income' ? 'bg-lime-50 text-lime-700' : 'bg-red-50 text-red-600'"
+                    >
+                      {{ t.type === 'income' ? t('incomeBadge') : t('expenseBadge') }}
+                    </span>
+                  </td>
                 <td class="py-3 px-3 text-xs text-gray-500">{{ t.wallet || '-' }}</td>
                 <td class="py-3 px-3 text-right font-bold" :class="t.type === 'income' ? 'text-lime-600' : 'text-slate-900'">
                   {{ t.type === 'income' ? '+' : '-' }}{{ formatRupiah(Math.abs(t.amount)) }}
@@ -438,22 +439,22 @@ watch(totalPages, (value) => {
           </table>
         </div>
         <div class="flex items-center justify-between mt-4 text-xs text-gray-400">
-          <span>Menampilkan {{ pageStart }}-{{ pageEnd }} dari {{ sortedTransactions.length }}</span>
+          <span>{{ t('showingRange', { start: pageStart, end: pageEnd, total: sortedTransactions.length }) }}</span>
           <div class="flex items-center gap-2">
             <button
               class="px-3 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-slate-900 hover:border-gray-300 disabled:opacity-50"
               :disabled="currentPage === 1"
               @click="goPrevPage"
             >
-              Prev
+              {{ t('prev') }}
             </button>
-            <span class="text-xs font-semibold text-slate-700">{{ currentPage }} / {{ totalPages }}</span>
+            <span class="text-xs font-semibold text-slate-700">{{ t('pageLabel', { current: currentPage, total: totalPages }) }}</span>
             <button
               class="px-3 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-slate-900 hover:border-gray-300 disabled:opacity-50"
               :disabled="currentPage === totalPages"
               @click="goNextPage"
             >
-              Next
+              {{ t('next') }}
             </button>
           </div>
         </div>
@@ -464,8 +465,8 @@ watch(totalPages, (value) => {
       <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm md:mt-2">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h4 class="font-bold text-slate-900">Perbandingan Bulan Ini</h4>
-            <p class="text-xs text-gray-400">Pemasukan vs Pengeluaran</p>
+            <h4 class="font-bold text-slate-900">{{ t('comparisonTitle') }}</h4>
+            <p class="text-xs text-gray-400">{{ t('comparisonSubtitle') }}</p>
           </div>
           <span class="text-xs text-gray-400">{{ monthName }}</span>
         </div>
@@ -475,7 +476,7 @@ watch(totalPages, (value) => {
             <div
               class="absolute inset-5 rounded-full bg-white border border-gray-100 flex flex-col items-center justify-center"
             >
-              <span class="text-[10px] text-gray-400">Total</span>
+              <span class="text-[10px] text-gray-400">{{ t('totalLabel') }}</span>
               <span class="text-sm font-bold text-slate-900">{{ formatRupiah(totalFlow) }}</span>
             </div>
           </div>
@@ -484,7 +485,7 @@ watch(totalPages, (value) => {
           <div class="rounded-xl border border-lime-100 bg-lime-50 p-3">
             <div class="flex items-center gap-2">
               <div class="w-2 h-2 rounded-full bg-lime-400"></div>
-              <span class="text-xs font-semibold text-lime-700">Pemasukan</span>
+              <span class="text-xs font-semibold text-lime-700">{{ t('income') }}</span>
             </div>
             <p class="text-sm font-bold text-slate-900 mt-1">{{ formatRupiah(totalMonthIncome) }}</p>
             <p class="text-[10px] text-gray-400">{{ Math.round(incomePercent) }}%</p>
@@ -492,14 +493,14 @@ watch(totalPages, (value) => {
           <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
             <div class="flex items-center gap-2">
               <div class="w-2 h-2 rounded-full bg-slate-900"></div>
-              <span class="text-xs font-semibold text-slate-600">Pengeluaran</span>
+              <span class="text-xs font-semibold text-slate-600">{{ t('expense') }}</span>
             </div>
             <p class="text-sm font-bold text-slate-900 mt-1">{{ formatRupiah(totalMonthExpense) }}</p>
             <p class="text-[10px] text-gray-400">{{ Math.round(expensePercent) }}%</p>
           </div>
         </div>
         <div v-if="totalFlow === 0" class="text-center text-xs text-gray-400 mt-4">
-          Belum ada transaksi di bulan ini.
+          {{ t('noTransactionsThisMonth') }}
         </div>
       </div>
     </div>
@@ -513,7 +514,7 @@ watch(totalPages, (value) => {
         <div class="relative z-10 bg-white w-full sm:w-11/12 md:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up md:animate-fade-in">
           <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
             <div>
-              <p class="text-xs text-gray-400">Detail Transaksi</p>
+              <p class="text-xs text-gray-400">{{ t('detailTransactions') }}</p>
               <h3 class="text-lg font-bold text-slate-900">{{ selectedTransaction.title }}</h3>
             </div>
             <button
@@ -526,29 +527,29 @@ watch(totalPages, (value) => {
           <div class="px-6 py-5 space-y-3">
             <template v-if="selectedTransaction.type === 'income'">
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Tipe</span>
+                <span class="text-xs text-gray-400">{{ t('type') }}</span>
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-lime-50 text-lime-600">
-                  Pemasukan
+                  {{ t('incomeBadge') }}
                 </span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Tanggal</span>
+                <span class="text-xs text-gray-400">{{ t('date') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.date }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Nama Pemasukan</span>
+                <span class="text-xs text-gray-400">{{ t('incomeName') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ selectedTransaction.title }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Kategori</span>
+                <span class="text-xs text-gray-400">{{ t('categoryLabel') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ selectedTransaction.category }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Masuk ke Dompet</span>
+                <span class="text-xs text-gray-400">{{ t('walletIn') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.wallet }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Jumlah</span>
+                <span class="text-xs text-gray-400">{{ t('amount') }}</span>
                 <span class="text-sm font-bold text-slate-900">
                   {{ formatRupiah(Math.abs(selectedTransaction.amount)) }}
                 </span>
@@ -556,39 +557,39 @@ watch(totalPages, (value) => {
             </template>
             <template v-else>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Tipe</span>
+                <span class="text-xs text-gray-400">{{ t('type') }}</span>
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-600">
-                  Pengeluaran
+                  {{ t('expenseBadge') }}
                 </span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Nama</span>
+                <span class="text-xs text-gray-400">{{ t('name') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ selectedTransaction.title }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Tanggal</span>
+                <span class="text-xs text-gray-400">{{ t('date') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.date }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Keterangan</span>
+                <span class="text-xs text-gray-400">{{ t('note') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ formatNote(selectedTransaction) }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Nominal</span>
+                <span class="text-xs text-gray-400">{{ t('nominal') }}</span>
                 <span class="text-sm font-bold text-slate-900">
                   {{ formatRupiah(Math.abs(selectedTransaction.amount)) }}
                 </span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Satuan</span>
+                <span class="text-xs text-gray-400">{{ t('unitPrice') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ formatSatuan(selectedTransaction) }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Promo</span>
+                <span class="text-xs text-gray-400">{{ t('promo') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ formatPromo(selectedTransaction) }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-xs text-gray-400">Sumber Dana</span>
+                <span class="text-xs text-gray-400">{{ t('sourceWallet') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.wallet }}</span>
               </div>
             </template>
@@ -598,7 +599,7 @@ watch(totalPages, (value) => {
               class="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-colors"
               @click="closeTransactionDetail"
             >
-              Tutup
+              {{ t('close') }}
             </button>
           </div>
         </div>

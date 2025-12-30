@@ -18,5 +18,15 @@ export default defineEventHandler(async (event) => {
 
   setSessionCookie(event, user.id);
 
-  return { user: { id: user.id, email: user.email, name: user.name } };
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      notificationsEnabled: user.notificationsEnabled,
+      darkMode: user.darkMode,
+      currency: user.currency,
+      language: user.language,
+    },
+  };
 });

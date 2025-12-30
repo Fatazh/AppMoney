@@ -10,6 +10,7 @@ const {
   formatRupiah,
   handleSaveTransaction,
   resetTransactionForm,
+  t,
 } = useMoneyManager();
 
 resetTransactionForm();
@@ -28,7 +29,7 @@ const selectedCategoryIcon = computed(() => {
   return selectedCategory.value?.icon || 'fa-tag';
 });
 
-const selectedCategoryLabel = computed(() => selectedCategory.value?.name || 'Pilih kategori');
+const selectedCategoryLabel = computed(() => selectedCategory.value?.name || t('selectCategory'));
 
 const selectCategory = (categoryId: string) => {
   formData.value.category = categoryId;
@@ -114,7 +115,7 @@ watch(
       class="bg-white w-full sm:w-11/12 md:max-w-lg h-[85%] sm:h-auto sm:max-h-[90%] rounded-t-3xl sm:rounded-3xl p-0 animate-slide-up md:animate-fade-in flex flex-col shadow-2xl"
     >
       <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center shrink-0">
-        <h3 class="text-xl font-bold text-slate-900">Tambah Transaksi</h3>
+        <h3 class="text-xl font-bold text-slate-900">{{ t('addTransaction') }}</h3>
         <button @click="showAddModal = false" class="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
           <i class="fas fa-times"></i>
         </button>
@@ -127,7 +128,7 @@ watch(
             :class="formData.type === 'expense' ? 'bg-slate-900 text-white shadow-md' : 'text-gray-500 hover:text-slate-700'"
           >
             <i class="fas fa-arrow-up text-sm"></i>
-            Pengeluaran
+            {{ t('expense') }}
           </button>
           <button
             @click="formData.type = 'income'"
@@ -135,14 +136,14 @@ watch(
             :class="formData.type === 'income' ? 'bg-lime-400 text-slate-900 shadow-md' : 'text-gray-500 hover:text-slate-700'"
           >
             <i class="fas fa-arrow-down text-sm"></i>
-            Pemasukan
+            {{ t('income') }}
           </button>
         </div>
       </div>
       <div class="flex-1 overflow-y-auto px-6 py-4 scrollbar-hide">
         <div v-if="formData.type === 'expense'" class="space-y-4 animate-fade-in">
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">Tanggal</label>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('date') }}</label>
             <div class="relative">
               <i class="fas fa-calendar text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
               <input
@@ -153,16 +154,16 @@ watch(
             </div>
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">Nama Produk</label>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('productName') }}</label>
             <input
               v-model="formData.productName"
               type="text"
-              placeholder="Contoh: Nasi Padang"
+              :placeholder="t('productExample')"
               class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
             />
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">Kategori</label>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('categoryLabel') }}</label>
             <div class="relative">
               <button
                 type="button"
@@ -200,7 +201,7 @@ watch(
           </div>
           <div class="flex gap-3">
             <div class="flex-1">
-              <label class="block text-xs text-gray-400 mb-1 ml-1">Jml</label>
+              <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('quantity') }}</label>
               <input
                 v-model="formData.quantity"
                 type="number"
@@ -209,7 +210,7 @@ watch(
               />
             </div>
             <div class="flex-[2]">
-              <label class="block text-xs text-gray-400 mb-1 ml-1">Harga</label>
+              <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('price') }}</label>
               <input
                 v-model="formData.pricePerItem"
                 type="number"
@@ -225,25 +226,25 @@ watch(
                 type="checkbox"
                 class="w-4 h-4 text-lime-500 border-gray-300 rounded focus:ring-lime-400"
               />
-              Gunakan Promo
+              {{ t('usePromo') }}
             </label>
             <div v-if="formData.hasPromo" class="space-y-3">
               <div>
-                <label class="block text-xs text-gray-400 mb-1 ml-1">Tipe Promo</label>
+                <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('promoTypeLabel') }}</label>
                 <div class="relative">
                   <select
                     v-model="formData.promoType"
                     class="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 pl-4 pr-10 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400 appearance-none"
                   >
-                    <option value="percent">Diskon (%)</option>
-                    <option value="nominal">Diskon Nominal</option>
-                    <option value="buyXgetY">Buy X Get Y</option>
+                    <option value="percent">{{ t('promoPercent') }}</option>
+                    <option value="nominal">{{ t('promoNominal') }}</option>
+                    <option value="buyXgetY">{{ t('promoBuyXGetY') }}</option>
                   </select>
                   <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
                 </div>
               </div>
               <div v-if="formData.promoType === 'percent'">
-                <label class="block text-xs text-gray-400 mb-1 ml-1">Diskon (%)</label>
+                <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('promoPercent') }}</label>
                 <input
                   v-model="formData.promoValue"
                   type="number"
@@ -254,7 +255,7 @@ watch(
                 />
               </div>
               <div v-else-if="formData.promoType === 'nominal'">
-                <label class="block text-xs text-gray-400 mb-1 ml-1">Diskon Nominal (Rp)</label>
+                <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('discountNominalLabel') }}</label>
                 <input
                   v-model="formData.promoValue"
                   type="number"
@@ -265,7 +266,7 @@ watch(
               </div>
               <div v-else class="flex gap-3">
                 <div class="flex-1">
-                  <label class="block text-xs text-gray-400 mb-1 ml-1">Buy X</label>
+                  <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('buyXLabel') }}</label>
                   <input
                     v-model="formData.buyX"
                     type="number"
@@ -275,7 +276,7 @@ watch(
                   />
                 </div>
                 <div class="flex-1">
-                  <label class="block text-xs text-gray-400 mb-1 ml-1">Get Y</label>
+                  <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('getYLabel') }}</label>
                   <input
                     v-model="formData.getY"
                     type="number"
@@ -288,7 +289,7 @@ watch(
             </div>
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">Sumber Dana</label>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('sourceWallet') }}</label>
             <div class="relative">
               <i class="fas fa-credit-card text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
               <select
@@ -306,18 +307,18 @@ watch(
               class="mt-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600"
             >
               <i class="fas fa-circle-exclamation"></i>
-              <span>Sumber dana yang anda pilih tidak memiliki saldo yang cukup.</span>
+              <span>{{ t('insufficientFunds') }}</span>
             </div>
           </div>
           <div class="bg-slate-900 rounded-xl p-4 flex justify-between items-center shadow-lg shadow-slate-200">
-            <span class="text-slate-300 font-medium text-sm">Total Akhir</span>
+            <span class="text-slate-300 font-medium text-sm">{{ t('finalTotal') }}</span>
             <span class="text-lime-400 text-xl font-bold tracking-tight">{{ formatRupiah(formData.totalAmount) }}</span>
           </div>
         </div>
 
         <div v-else class="space-y-4 animate-fade-in">
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">Tanggal</label>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('date') }}</label>
             <div class="relative">
               <i class="fas fa-calendar text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
               <input
@@ -328,16 +329,16 @@ watch(
             </div>
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">Nama Pemasukan</label>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('incomeName') }}</label>
             <input
               v-model="formData.productName"
               type="text"
-              placeholder="Contoh: Bonus Tahunan"
+              :placeholder="t('incomeExample')"
               class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
             />
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">Kategori</label>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('categoryLabel') }}</label>
             <div class="relative">
               <button
                 type="button"
@@ -374,7 +375,7 @@ watch(
             </div>
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">Masuk ke Dompet</label>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('walletIn') }}</label>
             <div class="relative">
               <i class="fas fa-wallet text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
               <select
@@ -387,7 +388,7 @@ watch(
             </div>
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">Jumlah (Rp)</label>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('amountLabel') }}</label>
             <input
               v-model="formData.incomeAmount"
               type="number"
@@ -404,7 +405,7 @@ watch(
           class="w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
           :class="insufficientFunds ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800'"
         >
-          Simpan Transaksi
+          {{ t('saveTransaction') }}
           <i class="fas fa-check"></i>
         </button>
       </div>

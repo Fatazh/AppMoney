@@ -84,7 +84,15 @@ export const getUserFromEvent = async (event: any) => {
   if (!userId) return null;
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, name: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      notificationsEnabled: true,
+      darkMode: true,
+      currency: true,
+      language: true,
+    },
   });
 };
 

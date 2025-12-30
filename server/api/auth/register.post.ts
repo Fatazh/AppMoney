@@ -44,7 +44,15 @@ export default defineEventHandler(async (event) => {
 
   const user = await prisma.user.create({
     data: { name, email, password: hashPassword(password) },
-    select: { id: true, email: true, name: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      notificationsEnabled: true,
+      darkMode: true,
+      currency: true,
+      language: true,
+    },
   });
 
   await prisma.$transaction([

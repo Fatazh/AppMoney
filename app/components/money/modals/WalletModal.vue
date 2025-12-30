@@ -6,6 +6,7 @@ const {
   handleSaveWallet,
   requestDeleteWallet,
   formatRupiah,
+  t,
 } = useMoneyManager();
 
 const walletTypes = ['Cash', 'Bank', 'E-Wallet'] as const;
@@ -15,23 +16,23 @@ const walletTypes = ['Cash', 'Bank', 'E-Wallet'] as const;
   <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center px-4">
     <div class="bg-white w-full max-w-sm rounded-3xl p-6 animate-slide-up-content shadow-2xl md:animate-fade-in">
       <div class="flex justify-between items-center mb-6">
-        <h3 class="text-xl font-bold text-slate-900">{{ editingWallet ? 'Edit Dompet' : 'Tambah Dompet' }}</h3>
+        <h3 class="text-xl font-bold text-slate-900">{{ editingWallet ? t('editWallet') : t('addWallet') }}</h3>
         <button @click="showWalletModal = false" class="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
           <i class="fas fa-times"></i>
         </button>
       </div>
       <div class="space-y-4 mb-8">
         <div>
-          <label class="block text-xs text-gray-400 mb-1 ml-1">Nama Dompet</label>
+          <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('walletNameLabel') }}</label>
           <input
             v-model="walletFormData.name"
             type="text"
-            placeholder="Contoh: Tabungan Liburan"
+            :placeholder="t('walletExample')"
             class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
           />
         </div>
         <div>
-          <label class="block text-xs text-gray-400 mb-1 ml-1">Tipe</label>
+          <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('typeLabel') }}</label>
           <div class="flex gap-2">
             <button
               v-for="type in walletTypes"
@@ -46,7 +47,7 @@ const walletTypes = ['Cash', 'Bank', 'E-Wallet'] as const;
         </div>
         <div v-if="editingWallet" class="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
           <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-400">Saldo Saat Ini</span>
+            <span class="text-xs text-gray-400">{{ t('currentBalance') }}</span>
             <span class="text-sm font-bold text-slate-900">
               {{ formatRupiah(editingWallet.balance) }}
             </span>
@@ -54,7 +55,7 @@ const walletTypes = ['Cash', 'Bank', 'E-Wallet'] as const;
         </div>
         <div>
           <label class="block text-xs text-gray-400 mb-1 ml-1">
-            {{ editingWallet ? 'Tambah Saldo (Rp)' : 'Saldo Awal (Opsional) (Rp)' }}
+            {{ editingWallet ? t('addBalanceLabel') : t('initialBalanceLabel') }}
           </label>
           <input
             v-model="walletFormData.balance"
@@ -63,7 +64,7 @@ const walletTypes = ['Cash', 'Bank', 'E-Wallet'] as const;
             class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-lime-400"
           />
           <p class="text-[10px] text-gray-400 mt-1 ml-1">
-            {{ editingWallet ? 'Kosongkan jika tidak menambah saldo.' : 'Kosongkan jika 0.' }}
+            {{ editingWallet ? t('emptyIfNoAdd') : t('emptyIfZero') }}
           </p>
         </div>
       </div>
@@ -72,14 +73,14 @@ const walletTypes = ['Cash', 'Bank', 'E-Wallet'] as const;
           @click="handleSaveWallet"
           class="w-full bg-lime-400 text-slate-900 py-3 rounded-xl font-bold hover:bg-lime-500 transition-colors"
         >
-          {{ editingWallet ? 'Simpan Perubahan' : 'Buat Dompet' }}
+          {{ editingWallet ? t('saveChanges') : t('createWallet') }}
         </button>
         <button
           v-if="editingWallet"
           @click="requestDeleteWallet()"
           class="w-full bg-red-50 text-red-600 py-3 rounded-xl font-bold hover:bg-red-100 transition-colors border border-red-100"
         >
-          Hapus Dompet
+          {{ t('deleteWallet') }}
         </button>
       </div>
     </div>
