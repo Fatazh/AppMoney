@@ -25,7 +25,7 @@ const iconOptions = [
 </script>
 
 <template>
-  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center px-4">
+  <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center px-4">
     <div class="bg-white w-full max-w-sm rounded-3xl p-6 animate-slide-up-content shadow-2xl md:animate-fade-in">
       <div class="flex justify-between items-center mb-6">
         <h3 class="text-xl font-bold text-slate-900">

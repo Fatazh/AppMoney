@@ -11,7 +11,7 @@ const {
 <template>
   <div
     v-if="showDeleteWalletModal"
-    class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center px-4"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center px-4"
     @click.self="cancelDeleteWallet"
   >
     <div class="bg-white w-full max-w-sm rounded-3xl p-6 animate-slide-up-content shadow-2xl md:animate-fade-in">

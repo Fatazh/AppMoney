@@ -110,7 +110,7 @@ watch(
 </script>
 
 <template>
-  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center">
+  <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center">
     <div
       class="bg-white w-full sm:w-11/12 md:max-w-lg h-[85%] sm:h-auto sm:max-h-[90%] rounded-t-3xl sm:rounded-3xl p-0 animate-slide-up md:animate-fade-in flex flex-col shadow-2xl"
     >
