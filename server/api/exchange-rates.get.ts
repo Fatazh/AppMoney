@@ -1,43 +1,38 @@
 import { createError } from 'h3';
 
-const cacheTtlMs = 1000 * 60 * 60;
-let cache: { expiresAt: number; payload: { base: string; rates: Record<string, number>; fetchedAt: string } } | null = null;
+const CACHE_TTL_MS = 1000 * 60 * 60;
+const API_URL = 'https://open.er-api.com/v6/latest/IDR';
+
+let cachedRates: { base: string; rates: Record<string, number>; updatedAt: number } | null = null;
+
+const buildResponse = (rates: Record<string, number>, updatedAt: number) => ({
+  base: 'IDR',
+  rates,
+  updatedAt,
+});
 
 export default defineEventHandler(async () => {
-  const config = useRuntimeConfig();
-  const apiKey = config.exchangeRateApiKey as string | undefined;
-  const base = 'IDR';
   const now = Date.now();
-
-  if (cache && cache.expiresAt > now) {
-    return cache.payload;
+  if (cachedRates && now - cachedRates.updatedAt < CACHE_TTL_MS) {
+    return cachedRates;
   }
 
-  const url = apiKey
-    ? `https://v6.exchangerate-api.com/v6/${apiKey}/latest/${base}`
-    : `https://open.er-api.com/v6/latest/${base}`;
+  try {
+    const response = await fetch(API_URL);
+    if (!response.ok) {
+      throw createError({ statusCode: 502, statusMessage: 'Gagal mengambil kurs.' });
+    }
 
-  const response = await $fetch<any>(url).catch((error) => {
-    throw createError({
-      statusCode: 502,
-      statusMessage: 'Gagal mengambil kurs mata uang.',
-      data: { error: String(error) },
-    });
-  });
+    const data = (await response.json()) as { rates?: Record<string, number>; result?: string };
+    const usdRate = Number(data?.rates?.USD);
+    if (!Number.isFinite(usdRate) || usdRate <= 0) {
+      throw createError({ statusCode: 502, statusMessage: 'Format kurs tidak valid.' });
+    }
 
-  const rates = response?.conversion_rates || response?.rates;
-  const baseCode = response?.base_code || response?.base || base;
-
-  if (!rates || typeof rates !== 'object') {
-    throw createError({ statusCode: 502, statusMessage: 'Format kurs mata uang tidak valid.' });
+    cachedRates = buildResponse({ IDR: 1, USD: usdRate }, now);
+    return cachedRates;
+  } catch (error) {
+    if (cachedRates) return cachedRates;
+    throw error;
   }
-
-  const payload = {
-    base: String(baseCode),
-    rates,
-    fetchedAt: new Date().toISOString(),
-  };
-
-  cache = { expiresAt: now + cacheTtlMs, payload };
-  return payload;
 });

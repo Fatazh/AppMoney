@@ -18,6 +18,7 @@ const {
   hasUnread,
   toggleNotifications,
   markAllNotificationsRead,
+  markNotificationRead,
   showAddModal,
   showWalletModal,
   showCategoryModal,
@@ -142,8 +143,9 @@ onBeforeUnmount(() => {
                   <div
                     v-for="notif in notifications"
                     :key="notif.id"
-                    class="p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors flex gap-3"
+                    class="p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors flex gap-3 cursor-pointer"
                     :class="!notif.read ? 'bg-lime-50/30' : ''"
+                    @click="markNotificationRead(notif.id)"
                   >
                     <div
                       class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1"

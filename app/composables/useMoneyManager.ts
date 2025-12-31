@@ -21,7 +21,7 @@ interface UserInfo {
 }
 
 interface NotificationItem {
-  id: number;
+  id: string;
   title: string;
   message: string;
   time: string;
@@ -155,6 +155,14 @@ interface BootstrapPayload {
       name: string;
     } | null;
   }>;
+  notifications: Array<{
+    id: string;
+    title: string;
+    message: string;
+    type: NotificationType;
+    read: boolean;
+    createdAt: string;
+  }>;
 }
 
 const walletTypeMapToUi: Record<DbWalletType, WalletType> = {
@@ -202,6 +210,7 @@ export const useMoneyManager = () => {
   const bootstrapped = useState<boolean>('mm-bootstrapped', () => false);
   const bootstrapping = useState<boolean>('mm-bootstrapping', () => false);
   const flashMessage = useState<FlashMessage | null>('mm-flash', () => null);
+  const runtimeConfig = useRuntimeConfig();
 
   const displayName = computed(() => {
     const name = currentUser.value?.name?.trim();
@@ -294,6 +303,14 @@ export const useMoneyManager = () => {
       preferences: 'Preferensi',
       notifications: 'Notifikasi',
       notificationsOff: 'Notifikasi sedang dimatikan.',
+      markReadFailed: 'Gagal menandai notifikasi dibaca.',
+      pushNotSupported: 'Browser tidak mendukung notifikasi.',
+      pushKeyMissing: 'Kunci push belum diatur.',
+      pushPermissionDenied: 'Izin notifikasi ditolak.',
+      pushPermissionBlocked: 'Izin notifikasi diblokir di browser.',
+      pushRegisterFailed: 'Gagal mendaftarkan notifikasi.',
+      pushSubscriptionFailed: 'Gagal mengaktifkan notifikasi.',
+      pushUnsubscribeFailed: 'Gagal menonaktifkan notifikasi.',
       darkMode: 'Mode Gelap',
       currency: 'Mata Uang',
       language: 'Bahasa',
@@ -332,6 +349,12 @@ export const useMoneyManager = () => {
       incomeExample: 'Contoh: Bonus Tahunan',
       amountLabel: 'Jumlah',
       saveTransaction: 'Simpan Transaksi',
+      transactionSaved: 'Transaksi berhasil disimpan.',
+      transactionNameRequired: 'Nama transaksi wajib diisi.',
+      transactionAmountInvalid: 'Jumlah transaksi harus lebih dari 0.',
+      transactionCategoryRequired: 'Kategori transaksi wajib dipilih.',
+      transactionWalletRequired: 'Dompet transaksi wajib dipilih.',
+      transactionSaveFailed: 'Gagal menyimpan transaksi.',
       editWallet: 'Edit Dompet',
       walletNameLabel: 'Nama Dompet',
       walletExample: 'Contoh: Tabungan Liburan',
@@ -445,6 +468,14 @@ export const useMoneyManager = () => {
       preferences: 'Preferences',
       notifications: 'Notifications',
       notificationsOff: 'Notifications are turned off.',
+      markReadFailed: 'Failed to mark notifications as read.',
+      pushNotSupported: 'Browser does not support notifications.',
+      pushKeyMissing: 'Push key is not configured.',
+      pushPermissionDenied: 'Notification permission was denied.',
+      pushPermissionBlocked: 'Notification permission is blocked in the browser.',
+      pushRegisterFailed: 'Failed to register notifications.',
+      pushSubscriptionFailed: 'Failed to enable notifications.',
+      pushUnsubscribeFailed: 'Failed to disable notifications.',
       darkMode: 'Dark Mode',
       currency: 'Currency',
       language: 'Language',
@@ -483,6 +514,12 @@ export const useMoneyManager = () => {
       incomeExample: 'Example: Annual bonus',
       amountLabel: 'Amount',
       saveTransaction: 'Save Transaction',
+      transactionSaved: 'Transaction saved.',
+      transactionNameRequired: 'Transaction name is required.',
+      transactionAmountInvalid: 'Transaction amount must be greater than 0.',
+      transactionCategoryRequired: 'Transaction category is required.',
+      transactionWalletRequired: 'Transaction wallet is required.',
+      transactionSaveFailed: 'Failed to save transaction.',
       editWallet: 'Edit Wallet',
       walletNameLabel: 'Wallet Name',
       walletExample: 'Example: Holiday Savings',
@@ -614,40 +651,7 @@ export const useMoneyManager = () => {
     info: { icon: 'fa-info-circle', bg: 'bg-blue-100', color: 'text-blue-600' },
   };
 
-  const notifications = useState<NotificationItem[]>('mm-notifications', () => [
-    {
-      id: 1,
-      title: 'Gaji Masuk!',
-      message: 'Pemasukan sebesar Rp8.500.000 telah tercatat.',
-      time: 'Baru saja',
-      type: 'success',
-      read: false,
-    },
-    {
-      id: 2,
-      title: 'Tagihan Listrik',
-      message: 'Jangan lupa bayar tagihan listrik sebelum tgl 20.',
-      time: '1 jam yang lalu',
-      type: 'warning',
-      read: false,
-    },
-    {
-      id: 3,
-      title: 'Tips Hemat',
-      message: 'Kurangi beli kopi di luar bisa hemat Rp500rb/bulan.',
-      time: 'Kemarin',
-      type: 'info',
-      read: true,
-    },
-    {
-      id: 4,
-      title: 'Batas Pengeluaran',
-      message: 'Anda hampir mencapai batas budget Makanan.',
-      time: '2 hari lalu',
-      type: 'alert',
-      read: true,
-    },
-  ]);
+  const notifications = useState<NotificationItem[]>('mm-notifications', () => []);
 
   const wallets = useState<WalletItem[]>('mm-wallets', () => []);
   const expenseCategories = useState<CategoryItem[]>('mm-expenseCategories', () => []);
@@ -664,7 +668,7 @@ export const useMoneyManager = () => {
   const showPasswordModal = useState<boolean>('mm-showPasswordModal', () => false);
 
   const showNotifications = useState<boolean>('mm-showNotifications', () => false);
-  const hasUnread = useState<boolean>('mm-hasUnread', () => true);
+  const hasUnread = useState<boolean>('mm-hasUnread', () => false);
 
   const editingWallet = useState<WalletItem | null>('mm-editingWallet', () => null);
   const walletToDelete = useState<WalletItem | null>('mm-walletToDelete', () => null);
@@ -726,6 +730,21 @@ export const useMoneyManager = () => {
     walletFormData.value = { name: '', type: 'Cash', balance: '' };
   };
 
+  const normalizeNotificationType = (type: string): NotificationType => {
+    if (type === 'success' || type === 'warning' || type === 'alert') return type;
+    return 'info';
+  };
+
+  const formatNotificationTime = (value: string) => {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toLocaleString(preferredLocale.value);
+  };
+
+  const updateHasUnread = () => {
+    hasUnread.value = notifications.value.some((notif) => !notif.read);
+  };
+
   const formatRupiah = (number: number) => {
     const currency = preferredCurrency.value;
     const locale = preferredLocale.value;
@@ -755,15 +774,32 @@ export const useMoneyManager = () => {
       return;
     }
     showNotifications.value = !showNotifications.value;
-    if (showNotifications.value) {
-      hasUnread.value = false;
+  };
+
+  const markAllNotificationsRead = async () => {
+    if (!notificationsEnabled.value) return;
+    try {
+      await $fetch('/api/notifications/read', { method: 'PUT' });
+      notifications.value = notifications.value.map((notif) => ({ ...notif, read: true }));
+      updateHasUnread();
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('markReadFailed')), 'error');
     }
   };
 
-  const markAllNotificationsRead = () => {
-    if (!notificationsEnabled.value) return;
-    notifications.value = notifications.value.map((notif) => ({ ...notif, read: true }));
-    hasUnread.value = false;
+  const markNotificationRead = async (notificationId: string) => {
+    const target = notifications.value.find((notif) => notif.id === notificationId);
+    if (!target || target.read) return;
+    target.read = true;
+    updateHasUnread();
+
+    try {
+      await $fetch(`/api/notifications/${notificationId}`, { method: 'PUT' });
+    } catch (error) {
+      target.read = false;
+      updateHasUnread();
+      setFlash(resolveErrorMessage(error, t('markReadFailed')), 'error');
+    }
   };
 
   const setFlash = (message: string, type: FlashType = 'success') => {
@@ -779,6 +815,119 @@ export const useMoneyManager = () => {
     error?.data?.message ||
     error?.message ||
     fallback;
+
+  const isPushSupported = () =>
+    typeof window !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    'Notification' in window;
+
+  const urlBase64ToUint8Array = (base64String: string) => {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i += 1) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  };
+
+  const sendPushSubscription = async (subscription: PushSubscription) => {
+    await $fetch('/api/push/subscribe', {
+      method: 'POST',
+      body: { subscription: subscription.toJSON() },
+    });
+  };
+
+  const registerPushWorker = async () => {
+    if (!isPushSupported()) return null;
+    try {
+      return await navigator.serviceWorker.register('/sw.js');
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('pushRegisterFailed')), 'error');
+      return null;
+    }
+  };
+
+  const syncPushSubscription = async () => {
+    if (!isPushSupported()) return;
+    if (Notification.permission !== 'granted') return;
+    try {
+      const registration =
+        (await navigator.serviceWorker.getRegistration('/sw.js')) || (await registerPushWorker());
+      if (!registration) return;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await sendPushSubscription(subscription);
+      }
+    } catch (error) {
+      console.error('Failed to sync push subscription', error);
+    }
+  };
+
+  const enablePushNotifications = async () => {
+    if (!isPushSupported()) {
+      setFlash(t('pushNotSupported'), 'error');
+      return false;
+    }
+
+    const publicKey = runtimeConfig.public?.webPushPublicKey as string | undefined;
+    if (!publicKey) {
+      setFlash(t('pushKeyMissing'), 'error');
+      return false;
+    }
+
+    if (Notification.permission === 'denied') {
+      setFlash(t('pushPermissionBlocked'), 'error');
+      return false;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      setFlash(t('pushPermissionDenied'), 'error');
+      return false;
+    }
+
+    const registration = await registerPushWorker();
+    if (!registration) {
+      setFlash(t('pushRegisterFailed'), 'error');
+      return false;
+    }
+
+    const existing = await registration.pushManager.getSubscription();
+    const subscription =
+      existing ||
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      }));
+
+    try {
+      await sendPushSubscription(subscription);
+      return true;
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('pushSubscriptionFailed')), 'error');
+      return false;
+    }
+  };
+
+  const disablePushNotifications = async () => {
+    if (!isPushSupported()) return;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await subscription.unsubscribe();
+        await $fetch('/api/push/unsubscribe', {
+          method: 'POST',
+          body: { endpoint: subscription.endpoint },
+        });
+      }
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('pushUnsubscribeFailed')), 'error');
+    }
+  };
 
   const handleApiError = (error: any, fallback: string) => {
     const message = resolveErrorMessage(error, fallback);
@@ -851,6 +1000,20 @@ export const useMoneyManager = () => {
         };
       });
 
+      notifications.value = (data.notifications || []).map((notif) => ({
+        id: notif.id,
+        title: notif.title,
+        message: notif.message,
+        time: formatNotificationTime(notif.createdAt),
+        type: normalizeNotificationType(notif.type),
+        read: notif.read,
+      }));
+      updateHasUnread();
+
+      if (process.client && currentUser.value?.notificationsEnabled) {
+        void syncPushSubscription();
+      }
+
       bootstrapped.value = true;
     } finally {
       if (timeout) clearTimeout(timeout);
@@ -870,6 +1033,8 @@ export const useMoneyManager = () => {
       expenseCategories.value = [];
       incomeCategories.value = [];
       transactions.value = [];
+      notifications.value = [];
+      hasUnread.value = false;
       bootstrapped.value = false;
       setFlash(t('loadFailed'), 'error');
     } finally {
@@ -888,6 +1053,8 @@ export const useMoneyManager = () => {
     expenseCategories.value = [];
     incomeCategories.value = [];
     transactions.value = [];
+    notifications.value = [];
+    hasUnread.value = false;
     bootstrapped.value = false;
   };
 
@@ -907,14 +1074,26 @@ export const useMoneyManager = () => {
         body: updates,
       });
       currentUser.value = response.user;
+      if (updates.notificationsEnabled === true) {
+        updateHasUnread();
+      }
     } catch (error) {
       currentUser.value = previous;
       setFlash(resolveErrorMessage(error, 'Gagal memperbarui preferensi.'), 'error');
     }
   };
 
-  const toggleNotificationsPreference = () =>
-    updatePreferences({ notificationsEnabled: !notificationsEnabled.value });
+  const toggleNotificationsPreference = async () => {
+    const nextValue = !notificationsEnabled.value;
+    if (nextValue) {
+      const enabled = await enablePushNotifications();
+      if (!enabled) return;
+      await updatePreferences({ notificationsEnabled: true });
+    } else {
+      await updatePreferences({ notificationsEnabled: false });
+      await disablePushNotifications();
+    }
+  };
 
   const toggleDarkModePreference = () =>
     updatePreferences({ darkMode: !darkModeEnabled.value });
@@ -1176,17 +1355,30 @@ export const useMoneyManager = () => {
 
   const handleSaveTransaction = async () => {
     const title = formData.value.productName.trim();
-    if (!title || formData.value.totalAmount <= 0) {
+    if (!title) {
+      setFlash(t('transactionNameRequired'), 'error');
+      return;
+    }
+    if (formData.value.totalAmount <= 0) {
+      setFlash(t('transactionAmountInvalid'), 'error');
       return;
     }
 
     const walletId =
       formData.value.type === 'expense' ? formData.value.sourceWallet : formData.value.destWallet;
 
-    if (!formData.value.category || !walletId) return;
+    if (!formData.value.category) {
+      setFlash(t('transactionCategoryRequired'), 'error');
+      return;
+    }
+    if (!walletId) {
+      setFlash(t('transactionWalletRequired'), 'error');
+      return;
+    }
     if (formData.value.type === 'expense') {
       const wallet = wallets.value.find((item) => item.id === walletId);
       if (wallet && wallet.balance < formData.value.totalAmount) {
+        setFlash(t('insufficientFunds'), 'error');
         return;
       }
     }
@@ -1235,8 +1427,9 @@ export const useMoneyManager = () => {
       showAddModal.value = false;
       resetTransactionForm();
       await refreshData();
+      setFlash(t('transactionSaved'), 'success');
     } catch (error) {
-      handleApiError(error, 'Gagal menyimpan transaksi.');
+      setFlash(resolveErrorMessage(error, t('transactionSaveFailed')), 'error');
     }
   };
 
@@ -1502,6 +1695,7 @@ export const useMoneyManager = () => {
   };
 
   const handleLogout = async () => {
+    await disablePushNotifications();
     await $fetch('/api/auth/logout', { method: 'POST' });
     clearData();
     await navigateTo('/auth/login');
@@ -1551,6 +1745,7 @@ export const useMoneyManager = () => {
     formatShortRupiah,
     toggleNotifications,
     markAllNotificationsRead,
+    markNotificationRead,
     ensureLoaded,
     refreshData,
     setFlash,

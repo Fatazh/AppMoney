@@ -402,8 +402,10 @@ watch(
         <button
           :disabled="insufficientFunds"
           @click="handleSaveTransaction"
-          class="w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
-          :class="insufficientFunds ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800'"
+          class="w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 active:scale-[0.98] mm-primary-action"
+          :class="insufficientFunds
+            ? 'bg-gray-200 text-gray-400 cursor-not-allowed is-disabled'
+            : 'bg-slate-900 text-white hover:bg-slate-800'"
         >
           {{ t('saveTransaction') }}
           <i class="fas fa-check"></i>

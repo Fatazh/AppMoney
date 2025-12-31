@@ -132,3 +132,17 @@
   z-index: -1;
   pointer-events: none;
 }
+.theme-dark .mm-primary-action {
+  background-color: #a3e635;
+  color: #0f172a;
+}
+.theme-dark .mm-primary-action:hover {
+  background-color: #bef264;
+}
+.theme-dark .mm-primary-action.is-disabled {
+  background-color: #1f2937;
+  color: #94a3b8;
+}
+.theme-dark .mm-primary-action.is-disabled:hover {
+  background-color: #1f2937;
+}

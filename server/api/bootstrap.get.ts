@@ -9,7 +9,7 @@ const toNumber = (value: any) => {
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event);
 
-  const [categories, wallets, transactions] = await prisma.$transaction([
+  const [categories, wallets, transactions, notifications] = await prisma.$transaction([
     prisma.category.findMany({
       where: { userId: user.id },
       select: { id: true, name: true, type: true, icon: true },
@@ -39,6 +39,12 @@ export default defineEventHandler(async (event) => {
         wallet: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
+    }),
+    prisma.notification.findMany({
+      where: { userId: user.id },
+      select: { id: true, title: true, message: true, type: true, read: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
     }),
   ]);
 
@@ -91,5 +97,13 @@ export default defineEventHandler(async (event) => {
     wallets: mappedWallets,
     categories,
     transactions: mappedTransactions,
+    notifications: notifications.map((notif) => ({
+      id: notif.id,
+      title: notif.title,
+      message: notif.message,
+      type: notif.type,
+      read: notif.read,
+      createdAt: notif.createdAt.toISOString(),
+    })),
   };
 });

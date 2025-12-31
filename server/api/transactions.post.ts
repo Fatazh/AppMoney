@@ -1,6 +1,7 @@
 import { readBody, createError } from 'h3';
 import { prisma } from '../utils/prisma';
 import { requireUser } from '../utils/auth';
+import { createNotification } from '../utils/notifications';
 
 const validPromoTypes = new Set(['PERCENT', 'FIXED', 'BUY_X_GET_Y']);
 
@@ -64,6 +65,30 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Dompet tidak ditemukan.' });
   }
 
+  const isExpense = category.type === 'EXPENSE';
+  let nextBalance: number | null = null;
+
+  if (isExpense) {
+    const [incomeAgg, expenseAgg] = await prisma.$transaction([
+      prisma.transaction.aggregate({
+        where: { userId: user.id, walletId: wallet.id, category: { type: 'INCOME' } },
+        _sum: { amount: true },
+      }),
+      prisma.transaction.aggregate({
+        where: { userId: user.id, walletId: wallet.id, category: { type: 'EXPENSE' } },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const incomeTotal = Number(incomeAgg._sum.amount || 0);
+    const expenseTotal = Number(expenseAgg._sum.amount || 0);
+    const currentBalance = Number(wallet.initialBalance || 0) + incomeTotal - expenseTotal;
+    nextBalance = currentBalance - amount;
+    if (nextBalance < 0) {
+      throw createError({ statusCode: 400, statusMessage: 'Saldo dompet tidak cukup.' });
+    }
+  }
+
   const transaction = await prisma.transaction.create({
     data: {
       amount,
@@ -82,6 +107,46 @@ export default defineEventHandler(async (event) => {
     },
     select: { id: true },
   });
+
+  const isEnglish = user.language === 'en';
+  const successTitle = isEnglish ? 'Transaction saved' : 'Transaksi berhasil';
+  const successMessage = isEnglish
+    ? `Transaction "${productName}" was saved.`
+    : `Transaksi "${productName}" berhasil disimpan.`;
+
+  try {
+    await createNotification({
+      userId: user.id,
+      title: successTitle,
+      message: successMessage,
+      type: 'success',
+      sendPush: Boolean(user.notificationsEnabled),
+      url: '/analytics?section=transactions',
+    });
+  } catch (error) {
+    console.error('Failed to create transaction notification', error);
+  }
+
+  const lowBalanceThreshold = Number(process.env.LOW_BALANCE_THRESHOLD || 50000);
+  if (nextBalance !== null && lowBalanceThreshold > 0 && nextBalance <= lowBalanceThreshold) {
+    const warningTitle = isEnglish ? 'Low balance' : 'Saldo menipis';
+    const warningMessage = isEnglish
+      ? `Wallet "${wallet.name}" balance is low.`
+      : `Saldo dompet "${wallet.name}" menipis.`;
+
+    try {
+      await createNotification({
+        userId: user.id,
+        title: warningTitle,
+        message: warningMessage,
+        type: 'warning',
+        sendPush: Boolean(user.notificationsEnabled),
+        url: '/master',
+      });
+    } catch (error) {
+      console.error('Failed to create low balance notification', error);
+    }
+  }
 
   return { transaction };
 });

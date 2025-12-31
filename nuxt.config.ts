@@ -10,6 +10,9 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     exchangeRateApiKey: process.env.EXCHANGE_RATE_API_KEY,
+    public: {
+      webPushPublicKey: process.env.WEB_PUSH_PUBLIC_KEY,
+    },
   },
 
   nitro: {
