@@ -9,6 +9,7 @@ import EditProfileModal from '~/components/money/modals/EditProfileModal.vue';
 import ChangePasswordModal from '~/components/money/modals/ChangePasswordModal.vue';
 
 const route = useRoute();
+const router = useRouter();
 
 const {
   displayName,
@@ -35,6 +36,11 @@ const {
 } = useMoneyManager();
 
 const isActive = (path: string) => route.path === path;
+
+const goToNotifications = () => {
+  showNotifications.value = false;
+  router.push('/notifications');
+};
 
 let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -166,7 +172,12 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <div class="p-3 bg-gray-50 text-center">
-                  <button class="text-xs font-bold text-slate-500 hover:text-slate-900">{{ t('viewAll') }}</button>
+                  <button
+                    class="text-xs font-bold text-slate-500 hover:text-slate-900"
+                    @click="goToNotifications"
+                  >
+                    {{ t('viewAll') }}
+                  </button>
                 </div>
               </div>
             </div>

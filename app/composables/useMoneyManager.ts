@@ -165,6 +165,8 @@ interface BootstrapPayload {
   }>;
 }
 
+type NotificationPayload = BootstrapPayload['notifications'][number];
+
 const walletTypeMapToUi: Record<DbWalletType, WalletType> = {
   CASH: 'Cash',
   BANK: 'Bank',
@@ -303,6 +305,7 @@ export const useMoneyManager = () => {
       preferences: 'Preferensi',
       notifications: 'Notifikasi',
       notificationsOff: 'Notifikasi sedang dimatikan.',
+      noNotifications: 'Belum ada notifikasi.',
       markReadFailed: 'Gagal menandai notifikasi dibaca.',
       pushNotSupported: 'Browser tidak mendukung notifikasi.',
       pushKeyMissing: 'Kunci push belum diatur.',
@@ -468,6 +471,7 @@ export const useMoneyManager = () => {
       preferences: 'Preferences',
       notifications: 'Notifications',
       notificationsOff: 'Notifications are turned off.',
+      noNotifications: 'No notifications yet.',
       markReadFailed: 'Failed to mark notifications as read.',
       pushNotSupported: 'Browser does not support notifications.',
       pushKeyMissing: 'Push key is not configured.',
@@ -741,6 +745,16 @@ export const useMoneyManager = () => {
     return parsed.toLocaleString(preferredLocale.value);
   };
 
+  const mapNotifications = (items: NotificationPayload[]) =>
+    items.map((notif) => ({
+      id: notif.id,
+      title: notif.title,
+      message: notif.message,
+      time: formatNotificationTime(notif.createdAt),
+      type: normalizeNotificationType(notif.type),
+      read: notif.read,
+    }));
+
   const updateHasUnread = () => {
     hasUnread.value = notifications.value.some((notif) => !notif.read);
   };
@@ -799,6 +813,18 @@ export const useMoneyManager = () => {
       target.read = false;
       updateHasUnread();
       setFlash(resolveErrorMessage(error, t('markReadFailed')), 'error');
+    }
+  };
+
+  const refreshNotifications = async (limit = 50) => {
+    try {
+      const data = await $fetch<{ notifications: NotificationPayload[] }>(
+        `/api/notifications?limit=${limit}`
+      );
+      notifications.value = mapNotifications(data.notifications || []);
+      updateHasUnread();
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
     }
   };
 
@@ -1000,14 +1026,7 @@ export const useMoneyManager = () => {
         };
       });
 
-      notifications.value = (data.notifications || []).map((notif) => ({
-        id: notif.id,
-        title: notif.title,
-        message: notif.message,
-        time: formatNotificationTime(notif.createdAt),
-        type: normalizeNotificationType(notif.type),
-        read: notif.read,
-      }));
+      notifications.value = mapNotifications(data.notifications || []);
       updateHasUnread();
 
       if (process.client && currentUser.value?.notificationsEnabled) {
@@ -1746,6 +1765,7 @@ export const useMoneyManager = () => {
     toggleNotifications,
     markAllNotificationsRead,
     markNotificationRead,
+    refreshNotifications,
     ensureLoaded,
     refreshData,
     setFlash,
