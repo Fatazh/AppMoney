@@ -17,10 +17,18 @@ logs
 .DS_Store
 .fleet
 .idea
-
+.vscode
+*.swp
 # Local env files
+.env
+.env.*
+!.env.example
 .ENV
 .ENV.*
 !.ENV.EXAMPLE
+.env
+.env.*
+!.env.example
+.env.local
 
 /app/generated/prisma

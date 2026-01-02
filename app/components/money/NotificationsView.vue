@@ -8,10 +8,13 @@ const {
   markAllNotificationsRead,
   markNotificationRead,
   refreshNotifications,
+  loadMoreNotifications,
+  notificationsHasMore,
   t,
 } = useMoneyManager();
 
 const isLoading = ref(false);
+const isLoadingMore = ref(false);
 
 const loadNotifications = async () => {
   if (!notificationsEnabled.value) return;
@@ -26,6 +29,16 @@ const loadNotifications = async () => {
 onMounted(() => {
   void loadNotifications();
 });
+
+const loadMore = async () => {
+  if (!notificationsHasMore.value || isLoadingMore.value) return;
+  isLoadingMore.value = true;
+  try {
+    await loadMoreNotifications(50);
+  } finally {
+    isLoadingMore.value = false;
+  }
+};
 </script>
 
 <template>
@@ -88,6 +101,18 @@ onMounted(() => {
           <p class="text-xs text-gray-500 mt-1 leading-snug">{{ notif.message }}</p>
         </div>
       </div>
+      <button
+        v-if="notificationsHasMore"
+        class="w-full py-2 text-xs font-bold text-slate-600 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-60"
+        :disabled="isLoadingMore"
+        @click="loadMore"
+      >
+        <span v-if="isLoadingMore">
+          <i class="fas fa-spinner fa-spin text-lime-500 mr-2"></i>
+          {{ t('loading') }}
+        </span>
+        <span v-else>{{ t('loadMore') }}</span>
+      </button>
     </div>
   </div>
 </template>

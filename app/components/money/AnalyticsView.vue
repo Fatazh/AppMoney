@@ -9,15 +9,24 @@ const {
   monthInputValue,
   changeMonth,
   handleDatePickerChange,
-  totalMonthExpense,
-  totalMonthIncome,
-  totalMonthNet,
+  analyticsSummary,
+  analyticsWeekly,
+  analyticsTransactions,
+  analyticsTotal,
+  analyticsPage,
+  analyticsPageSize,
+  analyticsTableLoading,
+  loadAnalytics,
+  fetchAnalyticsTransactions,
   formatRupiah,
   handleDownloadExcel,
   handlePrint,
-  filteredTransactions,
   t,
 } = useMoneyManager();
+
+const totalMonthIncome = computed(() => analyticsSummary.value?.income || 0);
+const totalMonthExpense = computed(() => analyticsSummary.value?.expense || 0);
+const totalMonthNet = computed(() => analyticsSummary.value?.net || 0);
 
 const totalFlow = computed(() => totalMonthIncome.value + totalMonthExpense.value);
 const incomePercent = computed(() =>
@@ -34,82 +43,38 @@ const pieStyle = computed(() => {
   return { background: `conic-gradient(#a3e635 0 ${income}%, #0f172a ${income}% 100%)` };
 });
 
-const analyticsWeeklyChart = computed(() => {
-  const [yearText, monthText] = monthInputValue.value.split('-');
-  const year = Number(yearText);
-  const month = Number(monthText) - 1;
-  if (!Number.isFinite(year) || !Number.isFinite(month)) {
-    return { data: [], maxVal: 1, daysInMonth: 0 };
-  }
-
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const data = [];
-  for (let start = 1, index = 0; start <= daysInMonth; start += 7, index += 1) {
-    const end = Math.min(start + 6, daysInMonth);
-    data.push({
-      week: index + 1,
-      startDay: start,
-      endDay: end,
-      income: 0,
-      expense: 0,
-    });
-  }
-
-  filteredTransactions.value.forEach((t) => {
-    const day = new Date(t.date).getDate();
-    const bucket = data[Math.floor((day - 1) / 7)];
-    if (!bucket) return;
-    if (t.type === 'income') {
-      bucket.income += 1;
-    } else {
-      bucket.expense += 1;
-    }
-  });
-
-  const maxVal = Math.max(...data.map((d) => Math.max(d.income, d.expense)), 1);
-  return { data, maxVal, daysInMonth };
-});
-
 const weeklyChartSafe = computed(
-  () => analyticsWeeklyChart.value ?? { data: [], maxVal: 1, daysInMonth: 0 }
+  () => analyticsWeekly.value ?? { data: [], maxVal: 1, daysInMonth: 0 }
 );
 
 const hasWeeklyData = computed(() =>
   weeklyChartSafe.value.data.some((d) => d.income > 0 || d.expense > 0)
 );
 
-const rowsPerPage = 5;
-const currentPage = ref(1);
-
-const sortedTransactions = computed(() =>
-  [...filteredTransactions.value].sort(
-    (a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()
-  )
-);
-
 const totalPages = computed(() =>
-  Math.max(1, Math.ceil(sortedTransactions.value.length / rowsPerPage))
+  Math.max(1, Math.ceil(analyticsTotal.value / analyticsPageSize))
 );
 
-const pagedTransactions = computed(() => {
-  const start = (currentPage.value - 1) * rowsPerPage;
-  return sortedTransactions.value.slice(start, start + rowsPerPage);
-});
+const pagedTransactions = computed(() => analyticsTransactions.value);
 
 const pageStart = computed(() =>
-  sortedTransactions.value.length === 0 ? 0 : (currentPage.value - 1) * rowsPerPage + 1
+  analyticsTotal.value === 0
+    ? 0
+    : (analyticsPage.value - 1) * analyticsPageSize + 1
 );
 
 const pageEnd = computed(() =>
-  Math.min(currentPage.value * rowsPerPage, sortedTransactions.value.length)
+  Math.min(analyticsPage.value * analyticsPageSize, analyticsTotal.value)
 );
 
 const goPrevPage = () => {
-  currentPage.value = Math.max(1, currentPage.value - 1);
+  if (analyticsPage.value <= 1) return;
+  void fetchAnalyticsTransactions(monthInputValue.value, analyticsPage.value - 1);
 };
 
 const goNextPage = () => {
-  currentPage.value = Math.min(totalPages.value, currentPage.value + 1);
+  if (analyticsPage.value >= totalPages.value) return;
+  void fetchAnalyticsTransactions(monthInputValue.value, analyticsPage.value + 1);
 };
 
 const selectedTransaction = ref<{
@@ -165,6 +130,7 @@ const scrollToDetail = () => {
 };
 
 onMounted(() => {
+  void loadAnalytics(1);
   if (route.query.section === 'transactions') {
     scrollToDetail();
   }
@@ -179,25 +145,6 @@ watch(
   }
 );
 
-watch(
-  () => filteredTransactions.value.length,
-  () => {
-    currentPage.value = 1;
-  }
-);
-
-watch(
-  () => monthInputValue.value,
-  () => {
-    currentPage.value = 1;
-  }
-);
-
-watch(totalPages, (value) => {
-  if (currentPage.value > value) {
-    currentPage.value = value;
-  }
-});
 </script>
 
 <template>
@@ -383,7 +330,7 @@ watch(totalPages, (value) => {
             <h3 class="font-bold text-slate-900">{{ t('transactionsDetailTitle') }}</h3>
             <p class="text-xs text-gray-400">{{ t('transactionsDetailSubtitle') }}</p>
           </div>
-          <span class="text-xs text-gray-400">{{ t('transactionsCount', { count: sortedTransactions.length }) }}</span>
+          <span class="text-xs text-gray-400">{{ t('transactionsCount', { count: analyticsTotal }) }}</span>
         </div>
         <div class="overflow-x-auto">
           <table class="min-w-full text-left">
@@ -398,60 +345,68 @@ watch(totalPages, (value) => {
               </tr>
             </thead>
             <tbody>
-              <tr v-if="pagedTransactions.length === 0">
+              <tr v-if="analyticsTableLoading">
+                <td colspan="6" class="py-6 text-center text-sm text-gray-400">
+                  <i class="fas fa-spinner fa-spin text-lime-500 mr-2"></i>
+                  {{ t('loading') }}
+                </td>
+              </tr>
+              <tr v-else-if="pagedTransactions.length === 0">
                 <td colspan="6" class="py-6 text-center text-sm text-gray-400">
                   {{ t('noTransactionsTable') }}
                 </td>
               </tr>
-              <tr
-                v-for="t in pagedTransactions"
-                :key="t.id"
-                class="border-b border-gray-100 last:border-b-0 cursor-pointer hover:bg-gray-50"
-                @click="openTransactionDetail(t)"
-              >
-                <td class="py-3 px-3 text-xs text-gray-500 whitespace-nowrap">{{ t.date }}</td>
-                <td class="py-3 px-3">
-                  <div class="flex items-center gap-2">
-                    <div
-                      class="w-7 h-7 rounded-lg flex items-center justify-center"
-                      :class="t.type === 'income' ? 'bg-lime-50 text-lime-600' : 'bg-slate-50 text-slate-900'"
-                    >
-                      <i class="fas text-[11px]" :class="t.icon"></i>
+              <template v-else>
+                <tr
+                  v-for="t in pagedTransactions"
+                  :key="t.id"
+                  class="border-b border-gray-100 last:border-b-0 cursor-pointer hover:bg-gray-50"
+                  @click="openTransactionDetail(t)"
+                >
+                  <td class="py-3 px-3 text-xs text-gray-500 whitespace-nowrap">{{ t.date }}</td>
+                  <td class="py-3 px-3">
+                    <div class="flex items-center gap-2">
+                      <div
+                        class="w-7 h-7 rounded-lg flex items-center justify-center"
+                        :class="t.type === 'income' ? 'bg-lime-50 text-lime-600' : 'bg-slate-50 text-slate-900'"
+                      >
+                        <i class="fas text-[11px]" :class="t.icon"></i>
+                      </div>
+                      <span class="text-sm font-semibold text-slate-900 truncate">{{ t.title }}</span>
                     </div>
-                    <span class="text-sm font-semibold text-slate-900 truncate">{{ t.title }}</span>
-                  </div>
-                </td>
-                <td class="py-3 px-3 text-xs text-gray-500">{{ t.category }}</td>
-                <td class="py-3 px-3">
-                    <span
-                      class="text-[10px] font-bold px-2.5 py-1 rounded-full"
-                      :class="t.type === 'income' ? 'bg-lime-50 text-lime-700' : 'bg-red-50 text-red-600'"
-                    >
-                      {{ t.type === 'income' ? t('incomeBadge') : t('expenseBadge') }}
-                    </span>
                   </td>
-                <td class="py-3 px-3 text-xs text-gray-500">{{ t.wallet || '-' }}</td>
-                <td class="py-3 px-3 text-right font-bold" :class="t.type === 'income' ? 'text-lime-600' : 'text-slate-900'">
-                  {{ t.type === 'income' ? '+' : '-' }}{{ formatRupiah(Math.abs(t.amount)) }}
-                </td>
-              </tr>
+                  <td class="py-3 px-3 text-xs text-gray-500">{{ t.category }}</td>
+                  <td class="py-3 px-3">
+                      <span
+                        class="text-[10px] font-bold px-2.5 py-1 rounded-full"
+                        :class="t.type === 'income' ? 'bg-lime-50 text-lime-700' : 'bg-red-50 text-red-600'"
+                      >
+                        {{ t.type === 'income' ? t('incomeBadge') : t('expenseBadge') }}
+                      </span>
+                    </td>
+                  <td class="py-3 px-3 text-xs text-gray-500">{{ t.wallet || '-' }}</td>
+                  <td class="py-3 px-3 text-right font-bold" :class="t.type === 'income' ? 'text-lime-600' : 'text-slate-900'">
+                    {{ t.type === 'income' ? '+' : '-' }}{{ formatRupiah(Math.abs(t.amount)) }}
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
         <div class="flex items-center justify-between mt-4 text-xs text-gray-400">
-          <span>{{ t('showingRange', { start: pageStart, end: pageEnd, total: sortedTransactions.length }) }}</span>
+          <span>{{ t('showingRange', { start: pageStart, end: pageEnd, total: analyticsTotal }) }}</span>
           <div class="flex items-center gap-2">
             <button
               class="px-3 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-slate-900 hover:border-gray-300 disabled:opacity-50"
-              :disabled="currentPage === 1"
+              :disabled="analyticsTableLoading || analyticsPage === 1"
               @click="goPrevPage"
             >
               {{ t('prev') }}
             </button>
-            <span class="text-xs font-semibold text-slate-700">{{ t('pageLabel', { current: currentPage, total: totalPages }) }}</span>
+            <span class="text-xs font-semibold text-slate-700">{{ t('pageLabel', { current: analyticsPage, total: totalPages }) }}</span>
             <button
               class="px-3 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-slate-900 hover:border-gray-300 disabled:opacity-50"
-              :disabled="currentPage === totalPages"
+              :disabled="analyticsTableLoading || analyticsPage === totalPages"
               @click="goNextPage"
             >
               {{ t('next') }}

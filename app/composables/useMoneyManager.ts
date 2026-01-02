@@ -42,6 +42,8 @@ interface WalletItem {
   balance: number;
   color: string;
   icon: string;
+  incomeTotal?: number;
+  expenseTotal?: number;
 }
 
 interface TransactionItem {
@@ -116,6 +118,26 @@ interface ExchangeRatesState {
   updatedAt: number;
 }
 
+interface AnalyticsSummary {
+  income: number;
+  expense: number;
+  net: number;
+}
+
+interface WeeklyBucket {
+  week: number;
+  startDay: number;
+  endDay: number;
+  income: number;
+  expense: number;
+}
+
+interface WeeklyChart {
+  data: WeeklyBucket[];
+  maxVal: number;
+  daysInMonth: number;
+}
+
 interface BootstrapPayload {
   user: UserInfo;
   wallets: Array<{
@@ -124,6 +146,8 @@ interface BootstrapPayload {
     type: DbWalletType;
     initialBalance: number;
     balance: number;
+    incomeTotal?: number;
+    expenseTotal?: number;
   }>;
   categories: Array<{
     id: string;
@@ -166,6 +190,7 @@ interface BootstrapPayload {
 }
 
 type NotificationPayload = BootstrapPayload['notifications'][number];
+type TransactionPayload = BootstrapPayload['transactions'][number];
 
 const walletTypeMapToUi: Record<DbWalletType, WalletType> = {
   CASH: 'Cash',
@@ -306,6 +331,7 @@ export const useMoneyManager = () => {
       notifications: 'Notifikasi',
       notificationsOff: 'Notifikasi sedang dimatikan.',
       noNotifications: 'Belum ada notifikasi.',
+      loadMore: 'Lihat lebih banyak',
       markReadFailed: 'Gagal menandai notifikasi dibaca.',
       pushNotSupported: 'Browser tidak mendukung notifikasi.',
       pushKeyMissing: 'Kunci push belum diatur.',
@@ -466,12 +492,14 @@ export const useMoneyManager = () => {
       expenseBadge: 'Pengeluaran',
       downloadCsv: 'Excel (.csv)',
       downloadPdf: 'PDF / Print',
+      noDataToExport: 'Tidak ada data untuk diekspor.',
     },
     en: {
       preferences: 'Preferences',
       notifications: 'Notifications',
       notificationsOff: 'Notifications are turned off.',
       noNotifications: 'No notifications yet.',
+      loadMore: 'Load more',
       markReadFailed: 'Failed to mark notifications as read.',
       pushNotSupported: 'Browser does not support notifications.',
       pushKeyMissing: 'Push key is not configured.',
@@ -632,6 +660,7 @@ export const useMoneyManager = () => {
       expenseBadge: 'Expense',
       downloadCsv: 'Excel (.csv)',
       downloadPdf: 'PDF / Print',
+      noDataToExport: 'No data to export.',
     },
   } as const;
 
@@ -656,11 +685,29 @@ export const useMoneyManager = () => {
   };
 
   const notifications = useState<NotificationItem[]>('mm-notifications', () => []);
+  const notificationsCursor = useState<string | null>('mm-notificationsCursor', () => null);
+  const notificationsHasMore = useState<boolean>('mm-notificationsHasMore', () => false);
 
   const wallets = useState<WalletItem[]>('mm-wallets', () => []);
   const expenseCategories = useState<CategoryItem[]>('mm-expenseCategories', () => []);
   const incomeCategories = useState<CategoryItem[]>('mm-incomeCategories', () => []);
   const transactions = useState<TransactionItem[]>('mm-transactions', () => []);
+  const analyticsSummary = useState<AnalyticsSummary>('mm-analyticsSummary', () => ({
+    income: 0,
+    expense: 0,
+    net: 0,
+  }));
+  const analyticsWeekly = useState<WeeklyChart>('mm-analyticsWeekly', () => ({
+    data: [],
+    maxVal: 1,
+    daysInMonth: 0,
+  }));
+  const analyticsTransactions = useState<TransactionItem[]>('mm-analyticsTransactions', () => []);
+  const analyticsTotal = useState<number>('mm-analyticsTotal', () => 0);
+  const analyticsPage = useState<number>('mm-analyticsPage', () => 1);
+  const analyticsLoading = useState<boolean>('mm-analyticsLoading', () => false);
+  const analyticsTableLoading = useState<boolean>('mm-analyticsTableLoading', () => false);
+  const analyticsPageSize = 5;
   const allCategories = computed(() => [...expenseCategories.value, ...incomeCategories.value]);
 
   const showAddModal = useState<boolean>('mm-showAddModal', () => false);
@@ -755,6 +802,33 @@ export const useMoneyManager = () => {
       read: notif.read,
     }));
 
+  const mapTransactions = (items: TransactionPayload[]) =>
+    items.map((tx) => {
+      const txType: TransactionType = tx.category.type === 'INCOME' ? 'income' : 'expense';
+      const title = (tx.productName || tx.category.name || '').trim() || tx.category.name;
+      const icon = tx.category.icon || resolveTransactionIcon(tx.category.name, txType);
+      return {
+        id: tx.id,
+        title,
+        category: tx.category.name,
+        categoryId: tx.category.id,
+        type: txType,
+        amount: Number(tx.amount || 0),
+        date: tx.date,
+        createdAt: tx.createdAt || tx.date,
+        icon,
+        wallet: tx.wallet?.name || '-',
+        walletId: tx.wallet?.id || null,
+        note: tx.note || null,
+        quantity: tx.quantity ?? 1,
+        pricePerUnit: tx.pricePerUnit ?? null,
+        promoType: tx.promoType ?? null,
+        promoValue: tx.promoValue ?? null,
+        promoBuyX: tx.promoBuyX ?? null,
+        promoGetY: tx.promoGetY ?? null,
+      };
+    });
+
   const updateHasUnread = () => {
     hasUnread.value = notifications.value.some((notif) => !notif.read);
   };
@@ -818,10 +892,30 @@ export const useMoneyManager = () => {
 
   const refreshNotifications = async (limit = 50) => {
     try {
-      const data = await $fetch<{ notifications: NotificationPayload[] }>(
-        `/api/notifications?limit=${limit}`
-      );
+      const data = await $fetch<{
+        notifications: NotificationPayload[];
+        nextCursor?: string | null;
+      }>(`/api/notifications?limit=${limit}`);
       notifications.value = mapNotifications(data.notifications || []);
+      notificationsCursor.value = data.nextCursor || null;
+      notificationsHasMore.value = Boolean(data.nextCursor);
+      updateHasUnread();
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
+    }
+  };
+
+  const loadMoreNotifications = async (limit = 50) => {
+    if (!notificationsHasMore.value || !notificationsCursor.value) return;
+    try {
+      const data = await $fetch<{
+        notifications: NotificationPayload[];
+        nextCursor?: string | null;
+      }>(`/api/notifications?limit=${limit}&cursor=${encodeURIComponent(notificationsCursor.value)}`);
+      const nextItems = mapNotifications(data.notifications || []);
+      notifications.value = [...notifications.value, ...nextItems];
+      notificationsCursor.value = data.nextCursor || null;
+      notificationsHasMore.value = Boolean(data.nextCursor);
       updateHasUnread();
     } catch (error) {
       setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
@@ -957,9 +1051,7 @@ export const useMoneyManager = () => {
 
   const handleApiError = (error: any, fallback: string) => {
     const message = resolveErrorMessage(error, fallback);
-    if (typeof window !== 'undefined') {
-      alert(message);
-    }
+    setFlash(message, 'error');
   };
 
   const fetchBootstrap = async () => {
@@ -995,36 +1087,14 @@ export const useMoneyManager = () => {
           name: wallet.name,
           type: uiType,
           balance: Number(wallet.balance || 0),
+          incomeTotal: typeof wallet.incomeTotal === 'number' ? wallet.incomeTotal : undefined,
+          expenseTotal: typeof wallet.expenseTotal === 'number' ? wallet.expenseTotal : undefined,
           color: meta.color,
           icon: meta.icon,
         };
       });
 
-      transactions.value = (data.transactions || []).map((tx) => {
-        const txType: TransactionType = tx.category.type === 'INCOME' ? 'income' : 'expense';
-        const title = (tx.productName || tx.category.name || '').trim() || tx.category.name;
-        const icon = tx.category.icon || resolveTransactionIcon(tx.category.name, txType);
-        return {
-          id: tx.id,
-          title,
-          category: tx.category.name,
-          categoryId: tx.category.id,
-          type: txType,
-          amount: Number(tx.amount || 0),
-          date: tx.date,
-          createdAt: tx.createdAt || tx.date,
-          icon,
-          wallet: tx.wallet?.name || '-',
-          walletId: tx.wallet?.id || null,
-          note: tx.note || null,
-          quantity: tx.quantity ?? 1,
-          pricePerUnit: tx.pricePerUnit ?? null,
-          promoType: tx.promoType ?? null,
-          promoValue: tx.promoValue ?? null,
-          promoBuyX: tx.promoBuyX ?? null,
-          promoGetY: tx.promoGetY ?? null,
-        };
-      });
+      transactions.value = mapTransactions(data.transactions || []);
 
       notifications.value = mapNotifications(data.notifications || []);
       updateHasUnread();
@@ -1066,6 +1136,47 @@ export const useMoneyManager = () => {
     await ensureLoaded();
   };
 
+  const fetchAnalyticsOverview = async (monthKey: string) => {
+    analyticsLoading.value = true;
+    try {
+      const data = await $fetch<{
+        summary: AnalyticsSummary;
+        weekly: WeeklyChart;
+      }>(`/api/analytics?month=${monthKey}`);
+      analyticsSummary.value = data.summary || { income: 0, expense: 0, net: 0 };
+      analyticsWeekly.value = data.weekly || { data: [], maxVal: 1, daysInMonth: 0 };
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
+    } finally {
+      analyticsLoading.value = false;
+    }
+  };
+
+  const fetchAnalyticsTransactions = async (monthKey: string, page = 1) => {
+    analyticsTableLoading.value = true;
+    try {
+      const data = await $fetch<{
+        transactions: TransactionPayload[];
+        total: number;
+      }>(`/api/transactions?month=${monthKey}&page=${page}&limit=${analyticsPageSize}`);
+      analyticsTransactions.value = mapTransactions(data.transactions || []);
+      analyticsTotal.value = Number(data.total || 0);
+      analyticsPage.value = page;
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
+    } finally {
+      analyticsTableLoading.value = false;
+    }
+  };
+
+  const loadAnalytics = async (page = 1) => {
+    const monthKey = monthInputValue.value;
+    await Promise.all([
+      fetchAnalyticsOverview(monthKey),
+      fetchAnalyticsTransactions(monthKey, page),
+    ]);
+  };
+
   const clearData = () => {
     currentUser.value = null;
     wallets.value = [];
@@ -1073,8 +1184,17 @@ export const useMoneyManager = () => {
     incomeCategories.value = [];
     transactions.value = [];
     notifications.value = [];
+    notificationsCursor.value = null;
+    notificationsHasMore.value = false;
     hasUnread.value = false;
     bootstrapped.value = false;
+    analyticsSummary.value = { income: 0, expense: 0, net: 0 };
+    analyticsWeekly.value = { data: [], maxVal: 1, daysInMonth: 0 };
+    analyticsTransactions.value = [];
+    analyticsTotal.value = 0;
+    analyticsPage.value = 1;
+    analyticsLoading.value = false;
+    analyticsTableLoading.value = false;
   };
 
   const updatePreferences = async (updates: Partial<UserPreferences>) => {
@@ -1452,15 +1572,25 @@ export const useMoneyManager = () => {
     }
   };
 
-  const getWalletIncome = (walletId: string) =>
-    transactions.value
+  const getWalletIncome = (walletId: string) => {
+    const wallet = wallets.value.find((item) => item.id === walletId);
+    if (wallet && typeof wallet.incomeTotal === 'number') {
+      return wallet.incomeTotal;
+    }
+    return transactions.value
       .filter((t) => t.walletId === walletId && t.amount > 0)
       .reduce((acc, curr) => acc + curr.amount, 0);
+  };
 
-  const getWalletExpense = (walletId: string) =>
-    transactions.value
+  const getWalletExpense = (walletId: string) => {
+    const wallet = wallets.value.find((item) => item.id === walletId);
+    if (wallet && typeof wallet.expenseTotal === 'number') {
+      return wallet.expenseTotal;
+    }
+    return transactions.value
       .filter((t) => t.walletId === walletId && t.amount < 0)
       .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+  };
 
   const currentMonthTransactions = computed(() => {
     const now = new Date();
@@ -1668,6 +1798,7 @@ export const useMoneyManager = () => {
     const newDate = new Date(statsDate.value);
     newDate.setMonth(newDate.getMonth() + direction);
     statsDate.value = newDate.getTime();
+    void loadAnalytics(1);
   };
 
   const handleDatePickerChange = (event: Event) => {
@@ -1675,19 +1806,50 @@ export const useMoneyManager = () => {
     if (!target.value) return;
     const [year, month] = target.value.split('-');
     statsDate.value = new Date(Number(year), Number(month) - 1, 1).getTime();
+    void loadAnalytics(1);
   };
 
-  const handleDownloadExcel = () => {
-    const filtered = filteredTransactions.value;
-    if (filtered.length === 0) {
-      alert('Tidak ada data.');
+  const fetchAllTransactionsForMonth = async (monthKey: string) => {
+    const all: TransactionItem[] = [];
+    const pageSize = 50;
+    let page = 1;
+    let total = 0;
+
+    while (true) {
+      const data = await $fetch<{
+        transactions: TransactionPayload[];
+        total: number;
+      }>(`/api/transactions?month=${monthKey}&page=${page}&limit=${pageSize}`);
+      const items = mapTransactions(data.transactions || []);
+      if (page === 1) {
+        total = Number(data.total || 0);
+      }
+      all.push(...items);
+      if (all.length >= total || items.length === 0) break;
+      page += 1;
+    }
+
+    return all;
+  };
+
+  const handleDownloadExcel = async () => {
+    let items: TransactionItem[] = [];
+    try {
+      items = await fetchAllTransactionsForMonth(monthInputValue.value);
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
+      return;
+    }
+
+    if (items.length === 0) {
+      setFlash(t('noDataToExport'), 'info');
       return;
     }
 
     const headers = ['Tanggal', 'Judul', 'Kategori', 'Jumlah', 'Tipe', 'Dompet'];
     const csvContent = [
       headers.join(','),
-      ...filtered.map((t) =>
+      ...items.map((t) =>
         [
           t.date,
           `"${t.title}"`,
@@ -1734,6 +1896,7 @@ export const useMoneyManager = () => {
     languageOptions,
     t,
     notifications,
+    notificationsHasMore,
     notificationStyles,
     bootstrapping,
     flashMessage,
@@ -1741,6 +1904,14 @@ export const useMoneyManager = () => {
     expenseCategories,
     incomeCategories,
     transactions,
+    analyticsSummary,
+    analyticsWeekly,
+    analyticsTransactions,
+    analyticsTotal,
+    analyticsPage,
+    analyticsPageSize,
+    analyticsLoading,
+    analyticsTableLoading,
     showAddModal,
     showWalletModal,
     showCategoryModal,
@@ -1766,6 +1937,7 @@ export const useMoneyManager = () => {
     markAllNotificationsRead,
     markNotificationRead,
     refreshNotifications,
+    loadMoreNotifications,
     ensureLoaded,
     refreshData,
     setFlash,
@@ -1786,6 +1958,8 @@ export const useMoneyManager = () => {
     requestDeleteWallet,
     confirmDeleteWallet,
     cancelDeleteWallet,
+    loadAnalytics,
+    fetchAnalyticsTransactions,
     openCategoryModal,
     handleOpenEditCategory,
     handleSaveCategory,
