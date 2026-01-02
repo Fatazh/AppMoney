@@ -1,4 +1,5 @@
 import { readBody, createError } from 'h3';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../utils/prisma';
 import { requireUser } from '../utils/auth';
 import { createNotification } from '../utils/notifications';
@@ -20,6 +21,10 @@ const toCents = (value: unknown) => {
 
 const isRetryable = (error: any) =>
   error?.code === 'P2034' || error?.code === '40001';
+
+const runInteractiveTransaction = <T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>
+) => (prisma as PrismaClient).$transaction(fn, { isolationLevel: 'Serializable' });
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event);
@@ -76,70 +81,67 @@ export default defineEventHandler(async (event) => {
   const amountCents = toCents(resolvedAmount);
 
   const executeTransaction = () =>
-    prisma.$transaction(
-      async (tx) => {
-        const category = await tx.category.findFirst({
-          where: { id: categoryId, userId: user.id },
-        });
-        if (!category) {
-          throw createError({ statusCode: 404, statusMessage: 'Kategori tidak ditemukan.' });
+    runInteractiveTransaction(async (tx) => {
+      const category = await tx.category.findFirst({
+        where: { id: categoryId, userId: user.id },
+      });
+      if (!category) {
+        throw createError({ statusCode: 404, statusMessage: 'Kategori tidak ditemukan.' });
+      }
+
+      const wallet = await tx.wallet.findFirst({
+        where: { id: resolvedWalletId, userId: user.id },
+      });
+      if (!wallet) {
+        throw createError({ statusCode: 404, statusMessage: 'Dompet tidak ditemukan.' });
+      }
+
+      const isExpense = category.type === 'EXPENSE';
+      let nextBalanceCents: number | null = null;
+
+      if (isExpense) {
+        const [incomeAgg, expenseAgg] = await Promise.all([
+          tx.transaction.aggregate({
+            where: { userId: user.id, walletId: wallet.id, category: { type: 'INCOME' } },
+            _sum: { amount: true },
+          }),
+          tx.transaction.aggregate({
+            where: { userId: user.id, walletId: wallet.id, category: { type: 'EXPENSE' } },
+            _sum: { amount: true },
+          }),
+        ]);
+
+        const incomeTotalCents = toCents(incomeAgg._sum.amount);
+        const expenseTotalCents = toCents(expenseAgg._sum.amount);
+        const currentBalanceCents =
+          toCents(wallet.initialBalance) + incomeTotalCents - expenseTotalCents;
+        nextBalanceCents = currentBalanceCents - amountCents;
+        if (nextBalanceCents < 0) {
+          throw createError({ statusCode: 400, statusMessage: 'Saldo dompet tidak cukup.' });
         }
+      }
 
-        const wallet = await tx.wallet.findFirst({
-          where: { id: resolvedWalletId, userId: user.id },
-        });
-        if (!wallet) {
-          throw createError({ statusCode: 404, statusMessage: 'Dompet tidak ditemukan.' });
-        }
+      const created = await tx.transaction.create({
+        data: {
+          amount: resolvedAmount,
+          date,
+          note,
+          productName,
+          categoryId: category.id,
+          userId: user.id,
+          quantity,
+          pricePerUnit,
+          promoType,
+          promoValue,
+          promoBuyX,
+          promoGetY,
+          walletId: wallet.id,
+        },
+        select: { id: true },
+      });
 
-        const isExpense = category.type === 'EXPENSE';
-        let nextBalanceCents: number | null = null;
-
-        if (isExpense) {
-          const [incomeAgg, expenseAgg] = await Promise.all([
-            tx.transaction.aggregate({
-              where: { userId: user.id, walletId: wallet.id, category: { type: 'INCOME' } },
-              _sum: { amount: true },
-            }),
-            tx.transaction.aggregate({
-              where: { userId: user.id, walletId: wallet.id, category: { type: 'EXPENSE' } },
-              _sum: { amount: true },
-            }),
-          ]);
-
-          const incomeTotalCents = toCents(incomeAgg._sum.amount);
-          const expenseTotalCents = toCents(expenseAgg._sum.amount);
-          const currentBalanceCents =
-            toCents(wallet.initialBalance) + incomeTotalCents - expenseTotalCents;
-          nextBalanceCents = currentBalanceCents - amountCents;
-          if (nextBalanceCents < 0) {
-            throw createError({ statusCode: 400, statusMessage: 'Saldo dompet tidak cukup.' });
-          }
-        }
-
-        const created = await tx.transaction.create({
-          data: {
-            amount: resolvedAmount,
-            date,
-            note,
-            productName,
-            categoryId: category.id,
-            userId: user.id,
-            quantity,
-            pricePerUnit,
-            promoType,
-            promoValue,
-            promoBuyX,
-            promoGetY,
-            walletId: wallet.id,
-          },
-          select: { id: true },
-        });
-
-        return { transaction: created, walletName: wallet.name, nextBalanceCents };
-      },
-      { isolationLevel: 'Serializable' }
-    );
+      return { transaction: created, walletName: wallet.name, nextBalanceCents };
+    });
 
   let result:
     | { transaction: { id: string }; walletName: string; nextBalanceCents: number | null }
