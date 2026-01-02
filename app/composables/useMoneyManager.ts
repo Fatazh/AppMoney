@@ -65,6 +65,7 @@ interface TransactionItem {
   promoValue: number | null;
   promoBuyX: number | null;
   promoGetY: number | null;
+  pending?: boolean;
 }
 
 interface CategoryItem {
@@ -192,6 +193,36 @@ interface BootstrapPayload {
 type NotificationPayload = BootstrapPayload['notifications'][number];
 type TransactionPayload = BootstrapPayload['transactions'][number];
 
+interface OfflineTransactionPayload {
+  id: string;
+  createdAt: string;
+  payload: {
+    categoryId: string;
+    walletId: string;
+    amount: number;
+    date: string;
+    productName: string;
+    note: string | null;
+    quantity: number;
+    pricePerUnit: number | null;
+    promoType: string | null;
+    promoValue: number | null;
+    promoBuyX: number | null;
+    promoGetY: number | null;
+  };
+}
+
+interface OfflineCache {
+  version: number;
+  user: UserInfo;
+  wallets: WalletItem[];
+  expenseCategories: CategoryItem[];
+  incomeCategories: CategoryItem[];
+  transactions: TransactionItem[];
+  notifications: NotificationItem[];
+  updatedAt: string;
+}
+
 const walletTypeMapToUi: Record<DbWalletType, WalletType> = {
   CASH: 'Cash',
   BANK: 'Bank',
@@ -231,6 +262,10 @@ const resolveTransactionIcon = (category: string, type: TransactionType) => {
 };
 
 const getTodayString = () => new Date().toISOString().split('T')[0];
+
+const offlineCacheKey = 'mm-offline-cache-v1';
+const offlineQueueKey = 'mm-offline-queue-v1';
+const offlineCacheVersion = 1;
 
 export const useMoneyManager = () => {
   const currentUser = useState<UserInfo | null>('mm-user', () => null);
@@ -487,6 +522,10 @@ export const useMoneyManager = () => {
       logout: 'Keluar',
       appVersion: 'Versi Aplikasi {version} - MoneyKu Inc.',
       loadFailed: 'Gagal memuat data. Coba muat ulang.',
+      offlineMode: 'Sedang offline, menampilkan data tersimpan.',
+      offlineSaved: 'Transaksi disimpan offline dan akan tersinkron saat online.',
+      offlineNoCache: 'Anda offline dan belum ada data tersimpan.',
+      offlineSyncFailed: 'Gagal sinkron transaksi offline. Akan dicoba lagi.',
       rateUnavailable: 'Gagal mengambil kurs terbaru, memakai kurs cadangan.',
       incomeBadge: 'Pemasukan',
       expenseBadge: 'Pengeluaran',
@@ -655,6 +694,10 @@ export const useMoneyManager = () => {
       logout: 'Sign Out',
       appVersion: 'App Version {version} - MoneyKu Inc.',
       loadFailed: 'Failed to load data. Please refresh.',
+      offlineMode: 'You are offline, showing cached data.',
+      offlineSaved: 'Transaction saved offline and will sync when online.',
+      offlineNoCache: 'You are offline and no cached data is available.',
+      offlineSyncFailed: 'Failed to sync offline transactions. Will retry.',
       rateUnavailable: 'Unable to fetch latest rates, using fallback.',
       incomeBadge: 'Income',
       expenseBadge: 'Expense',
@@ -708,6 +751,14 @@ export const useMoneyManager = () => {
   const analyticsLoading = useState<boolean>('mm-analyticsLoading', () => false);
   const analyticsTableLoading = useState<boolean>('mm-analyticsTableLoading', () => false);
   const analyticsPageSize = 5;
+  const isOnline = useState<boolean>('mm-isOnline', () =>
+    process.client ? navigator.onLine : true
+  );
+  const connectionReady = useState<boolean>('mm-connectionReady', () => false);
+  const offlineQueue = useState<OfflineTransactionPayload[]>('mm-offlineQueue', () => []);
+  const offlineQueueLoaded = useState<boolean>('mm-offlineQueueLoaded', () => false);
+  const syncingQueue = useState<boolean>('mm-offlineSyncing', () => false);
+  const pendingSyncRefresh = useState<boolean>('mm-offlineSyncRefresh', () => false);
   const allCategories = computed(() => [...expenseCategories.value, ...incomeCategories.value]);
 
   const showAddModal = useState<boolean>('mm-showAddModal', () => false);
@@ -870,6 +921,7 @@ export const useMoneyManager = () => {
       await $fetch('/api/notifications/read', { method: 'PUT' });
       notifications.value = notifications.value.map((notif) => ({ ...notif, read: true }));
       updateHasUnread();
+      persistOfflineCache();
     } catch (error) {
       setFlash(resolveErrorMessage(error, t('markReadFailed')), 'error');
     }
@@ -887,6 +939,8 @@ export const useMoneyManager = () => {
       target.read = false;
       updateHasUnread();
       setFlash(resolveErrorMessage(error, t('markReadFailed')), 'error');
+    } finally {
+      persistOfflineCache();
     }
   };
 
@@ -900,6 +954,7 @@ export const useMoneyManager = () => {
       notificationsCursor.value = data.nextCursor || null;
       notificationsHasMore.value = Boolean(data.nextCursor);
       updateHasUnread();
+      persistOfflineCache();
     } catch (error) {
       setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
     }
@@ -917,6 +972,7 @@ export const useMoneyManager = () => {
       notificationsCursor.value = data.nextCursor || null;
       notificationsHasMore.value = Boolean(data.nextCursor);
       updateHasUnread();
+      persistOfflineCache();
     } catch (error) {
       setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
     }
@@ -935,6 +991,213 @@ export const useMoneyManager = () => {
     error?.data?.message ||
     error?.message ||
     fallback;
+
+  const isClient = typeof window !== 'undefined';
+  const isOffline = () => isClient && !isOnline.value;
+
+  const readStorage = <T,>(key: string, fallback: T) => {
+    if (!isClient) return fallback;
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) return fallback;
+      return JSON.parse(raw) as T;
+    } catch (error) {
+      return fallback;
+    }
+  };
+
+  const writeStorage = (key: string, value: unknown) => {
+    if (!isClient) return;
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      // Ignore storage errors (quota, private mode).
+    }
+  };
+
+  const removeStorage = (key: string) => {
+    if (!isClient) return;
+    try {
+      window.localStorage.removeItem(key);
+    } catch (error) {
+      // Ignore storage errors.
+    }
+  };
+
+  const loadOfflineQueue = () => {
+    if (!isClient) return [] as OfflineTransactionPayload[];
+    if (offlineQueueLoaded.value) return offlineQueue.value;
+    const saved = readStorage<OfflineTransactionPayload[]>(offlineQueueKey, []);
+    offlineQueue.value = Array.isArray(saved) ? saved : [];
+    offlineQueueLoaded.value = true;
+    return offlineQueue.value;
+  };
+
+  const saveOfflineQueue = (items: OfflineTransactionPayload[]) => {
+    offlineQueue.value = items;
+    offlineQueueLoaded.value = true;
+    writeStorage(offlineQueueKey, items);
+  };
+
+  const clearOfflineQueue = () => {
+    offlineQueue.value = [];
+    offlineQueueLoaded.value = true;
+    removeStorage(offlineQueueKey);
+  };
+
+  const loadOfflineCache = () => {
+    const cached = readStorage<OfflineCache | null>(offlineCacheKey, null);
+    if (!cached || cached.version !== offlineCacheVersion) return null;
+    return cached;
+  };
+
+  const persistOfflineCache = () => {
+    if (!currentUser.value) return;
+    const payload: OfflineCache = {
+      version: offlineCacheVersion,
+      user: currentUser.value,
+      wallets: wallets.value,
+      expenseCategories: expenseCategories.value,
+      incomeCategories: incomeCategories.value,
+      transactions: transactions.value,
+      notifications: notifications.value,
+      updatedAt: new Date().toISOString(),
+    };
+    writeStorage(offlineCacheKey, payload);
+  };
+
+  const clearOfflineCache = () => {
+    removeStorage(offlineCacheKey);
+  };
+
+  const applyOfflineCache = (cache: OfflineCache) => {
+    currentUser.value = cache.user || null;
+    wallets.value = cache.wallets || [];
+    expenseCategories.value = cache.expenseCategories || [];
+    incomeCategories.value = cache.incomeCategories || [];
+    transactions.value = cache.transactions || [];
+    notifications.value = cache.notifications || [];
+    notificationsCursor.value = null;
+    notificationsHasMore.value = false;
+    updateHasUnread();
+    if (cache.user?.currency && cache.user.currency !== 'IDR') {
+      void loadExchangeRates();
+    }
+  };
+
+  const applyPendingToWallet = (walletId: string, signedAmount: number) => {
+    const wallet = wallets.value.find((item) => item.id === walletId);
+    if (!wallet) return;
+    wallet.balance = Number(wallet.balance || 0) + signedAmount;
+    if (signedAmount > 0 && typeof wallet.incomeTotal === 'number') {
+      wallet.incomeTotal += signedAmount;
+    }
+    if (signedAmount < 0 && typeof wallet.expenseTotal === 'number') {
+      wallet.expenseTotal += Math.abs(signedAmount);
+    }
+  };
+
+  const buildLocalTransaction = (item: OfflineTransactionPayload) => {
+    const category = allCategories.value.find((cat) => cat.id === item.payload.categoryId);
+    const type: TransactionType = category?.type === 'income' ? 'income' : 'expense';
+    const amount = type === 'income' ? item.payload.amount : -item.payload.amount;
+    const title = item.payload.productName?.trim() || category?.name || 'Transaksi';
+    const icon = category?.icon || resolveTransactionIcon(category?.name || '', type);
+    const wallet = wallets.value.find((w) => w.id === item.payload.walletId);
+
+    return {
+      id: item.id,
+      title,
+      category: category?.name || 'Kategori',
+      categoryId: item.payload.categoryId,
+      type,
+      amount,
+      date: item.payload.date,
+      createdAt: item.createdAt,
+      icon,
+      wallet: wallet?.name || '-',
+      walletId: wallet?.id || null,
+      note: item.payload.note ?? null,
+      quantity: item.payload.quantity ?? 1,
+      pricePerUnit: item.payload.pricePerUnit ?? null,
+      promoType: item.payload.promoType ?? null,
+      promoValue: item.payload.promoValue ?? null,
+      promoBuyX: item.payload.promoBuyX ?? null,
+      promoGetY: item.payload.promoGetY ?? null,
+      pending: true,
+    };
+  };
+
+  const mergePendingTransactions = (queue: OfflineTransactionPayload[]) => {
+    if (!queue.length) return;
+    const existing = new Set(transactions.value.map((tx) => tx.id));
+    const additions: TransactionItem[] = [];
+
+    queue.forEach((item) => {
+      if (existing.has(item.id)) return;
+      const localTx = buildLocalTransaction(item);
+      additions.push(localTx);
+      applyPendingToWallet(item.payload.walletId, localTx.amount);
+    });
+
+    if (additions.length) {
+      transactions.value = [...additions, ...transactions.value];
+    }
+  };
+
+  const setupConnectionListeners = () => {
+    if (!isClient || connectionReady.value) return;
+    connectionReady.value = true;
+    isOnline.value = navigator.onLine;
+
+    window.addEventListener('online', () => {
+      isOnline.value = true;
+      void syncPendingTransactions();
+    });
+
+    window.addEventListener('offline', () => {
+      isOnline.value = false;
+    });
+  };
+
+  const syncPendingTransactions = async () => {
+    if (!isClient || syncingQueue.value) return;
+    if (!isOnline.value) return;
+    const queue = loadOfflineQueue();
+    if (queue.length === 0) return;
+
+    syncingQueue.value = true;
+    const remaining: OfflineTransactionPayload[] = [];
+    let syncedCount = 0;
+
+    try {
+      for (const item of queue) {
+        try {
+          await $fetch('/api/transactions', {
+            method: 'POST',
+            body: item.payload,
+          });
+          syncedCount += 1;
+        } catch (error) {
+          remaining.push(item);
+        }
+      }
+
+      saveOfflineQueue(remaining);
+      if (syncedCount > 0) {
+        if (bootstrapping.value) {
+          pendingSyncRefresh.value = true;
+        } else {
+          await refreshData();
+        }
+      }
+      if (remaining.length > 0) {
+        setFlash(t('offlineSyncFailed'), 'error');
+      }
+    } finally {
+      syncingQueue.value = false;
+    }
+  };
 
   const isPushSupported = () =>
     typeof window !== 'undefined' &&
@@ -1069,7 +1332,7 @@ export const useMoneyManager = () => {
         void loadExchangeRates();
       }
 
-      const categoryItems = (data.categories || []).map((cat) => ({
+      const categoryItems: CategoryItem[] = (data.categories || []).map((cat) => ({
         id: cat.id,
         name: cat.name,
         type: cat.type === 'INCOME' ? 'income' : 'expense',
@@ -1103,7 +1366,13 @@ export const useMoneyManager = () => {
         void syncPushSubscription();
       }
 
+      const pendingQueue = loadOfflineQueue();
+      if (pendingQueue.length) {
+        mergePendingTransactions(pendingQueue);
+      }
+
       bootstrapped.value = true;
+      persistOfflineCache();
     } finally {
       if (timeout) clearTimeout(timeout);
     }
@@ -1111,23 +1380,55 @@ export const useMoneyManager = () => {
 
   const ensureLoaded = async () => {
     if (process.server) return;
+    setupConnectionListeners();
     if (bootstrapped.value || bootstrapping.value) return;
     bootstrapping.value = true;
     try {
+      if (isOffline()) {
+        const cached = loadOfflineCache();
+        if (cached) {
+          applyOfflineCache(cached);
+          mergePendingTransactions(loadOfflineQueue());
+          bootstrapped.value = true;
+          setFlash(t('offlineMode'), 'info');
+          return;
+        }
+        throw new Error('offline-no-cache');
+      }
+
       await fetchBootstrap();
     } catch (error) {
-      console.error('Bootstrap error', error);
-      currentUser.value = null;
-      wallets.value = [];
-      expenseCategories.value = [];
-      incomeCategories.value = [];
-      transactions.value = [];
-      notifications.value = [];
-      hasUnread.value = false;
-      bootstrapped.value = false;
-      setFlash(t('loadFailed'), 'error');
+      const cached = loadOfflineCache();
+      if (cached) {
+        applyOfflineCache(cached);
+        mergePendingTransactions(loadOfflineQueue());
+        bootstrapped.value = true;
+        setFlash(t('offlineMode'), 'info');
+      } else {
+        console.error('Bootstrap error', error);
+        currentUser.value = null;
+        wallets.value = [];
+        expenseCategories.value = [];
+        incomeCategories.value = [];
+        transactions.value = [];
+        notifications.value = [];
+        hasUnread.value = false;
+        bootstrapped.value = false;
+        setFlash(isOffline() ? t('offlineNoCache') : t('loadFailed'), 'error');
+      }
     } finally {
       bootstrapping.value = false;
+      if (pendingSyncRefresh.value) {
+        pendingSyncRefresh.value = false;
+        await refreshData();
+        return;
+      }
+      if (!isOffline()) {
+        const pendingQueue = loadOfflineQueue();
+        if (pendingQueue.length) {
+          void syncPendingTransactions();
+        }
+      }
     }
   };
 
@@ -1136,8 +1437,92 @@ export const useMoneyManager = () => {
     await ensureLoaded();
   };
 
+  const parseMonthKey = (monthKey: string) => {
+    const [yearText, monthText] = monthKey.split('-');
+    const year = Number(yearText);
+    const month = Number(monthText);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+      return null;
+    }
+    return { year, monthIndex: month - 1 };
+  };
+
+  const getTransactionsForMonth = (monthKey: string) => {
+    const parsed = parseMonthKey(monthKey);
+    if (!parsed) return [] as TransactionItem[];
+    return transactions.value.filter((t) => {
+      const tDate = new Date(t.date);
+      if (Number.isNaN(tDate.getTime())) return false;
+      return tDate.getFullYear() === parsed.year && tDate.getMonth() === parsed.monthIndex;
+    });
+  };
+
+  const sortTransactionsByDate = (items: TransactionItem[]) =>
+    [...items].sort(
+      (a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()
+    );
+
+  const buildWeeklyChart = (items: TransactionItem[], monthKey: string): WeeklyChart => {
+    const parsed = parseMonthKey(monthKey);
+    if (!parsed) return { data: [], maxVal: 1, daysInMonth: 0 };
+    const daysInMonth = new Date(parsed.year, parsed.monthIndex + 1, 0).getDate();
+    const data: WeeklyBucket[] = [];
+    for (let day = 1, index = 0; day <= daysInMonth; day += 7, index += 1) {
+      data.push({
+        week: index + 1,
+        startDay: day,
+        endDay: Math.min(day + 6, daysInMonth),
+        income: 0,
+        expense: 0,
+      });
+    }
+
+    items.forEach((t) => {
+      const tDate = new Date(t.date);
+      if (Number.isNaN(tDate.getTime())) return;
+      const day = tDate.getDate();
+      const index = Math.floor((day - 1) / 7);
+      const bucket = data[index];
+      if (!bucket) return;
+      if (t.type === 'income') {
+        bucket.income += 1;
+      } else {
+        bucket.expense += 1;
+      }
+    });
+
+    const maxVal = Math.max(...data.map((d) => Math.max(d.income, d.expense)), 1);
+    return { data, maxVal, daysInMonth };
+  };
+
+  const applyOfflineAnalyticsOverview = (monthKey: string) => {
+    const items = getTransactionsForMonth(monthKey);
+    const income = items
+      .filter((t) => t.amount > 0)
+      .reduce((acc, curr) => acc + curr.amount, 0);
+    const expense = items
+      .filter((t) => t.amount < 0)
+      .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+
+    analyticsSummary.value = { income, expense, net: income - expense };
+    analyticsWeekly.value = buildWeeklyChart(items, monthKey);
+  };
+
+  const applyOfflineAnalyticsTransactions = (monthKey: string, page = 1) => {
+    const items = sortTransactionsByDate(getTransactionsForMonth(monthKey));
+    analyticsTotal.value = items.length;
+    analyticsPage.value = page;
+    const start = (page - 1) * analyticsPageSize;
+    analyticsTransactions.value = items.slice(start, start + analyticsPageSize);
+  };
+
   const fetchAnalyticsOverview = async (monthKey: string) => {
     analyticsLoading.value = true;
+    if (isOffline()) {
+      applyOfflineAnalyticsOverview(monthKey);
+      analyticsLoading.value = false;
+      return;
+    }
     try {
       const data = await $fetch<{
         summary: AnalyticsSummary;
@@ -1154,6 +1539,11 @@ export const useMoneyManager = () => {
 
   const fetchAnalyticsTransactions = async (monthKey: string, page = 1) => {
     analyticsTableLoading.value = true;
+    if (isOffline()) {
+      applyOfflineAnalyticsTransactions(monthKey, page);
+      analyticsTableLoading.value = false;
+      return;
+    }
     try {
       const data = await $fetch<{
         transactions: TransactionPayload[];
@@ -1195,6 +1585,11 @@ export const useMoneyManager = () => {
     analyticsPage.value = 1;
     analyticsLoading.value = false;
     analyticsTableLoading.value = false;
+    clearOfflineCache();
+    clearOfflineQueue();
+    offlineQueueLoaded.value = false;
+    syncingQueue.value = false;
+    pendingSyncRefresh.value = false;
   };
 
   const updatePreferences = async (updates: Partial<UserPreferences>) => {
@@ -1216,9 +1611,11 @@ export const useMoneyManager = () => {
       if (updates.notificationsEnabled === true) {
         updateHasUnread();
       }
+      persistOfflineCache();
     } catch (error) {
       currentUser.value = previous;
       setFlash(resolveErrorMessage(error, 'Gagal memperbarui preferensi.'), 'error');
+      persistOfflineCache();
     }
   };
 
@@ -1284,6 +1681,7 @@ export const useMoneyManager = () => {
       });
       currentUser.value = response.user;
       setFlash('Profil berhasil diperbarui.', 'success');
+      persistOfflineCache();
       closeProfileModal();
     } catch (error) {
       setFlash(resolveErrorMessage(error, 'Gagal memperbarui profil.'), 'error');
@@ -1544,23 +1942,46 @@ export const useMoneyManager = () => {
     const quantity = Math.max(1, Math.floor(parseFloat(String(formData.value.quantity)) || 1));
     const pricePerUnit = parseFloat(String(formData.value.pricePerItem)) || 0;
 
+    const payload = {
+      categoryId: formData.value.category,
+      walletId,
+      amount: formData.value.totalAmount,
+      date: formData.value.date,
+      productName: title,
+      note: formData.value.notes || null,
+      quantity: formData.value.type === 'expense' ? quantity : 1,
+      pricePerUnit: formData.value.type === 'expense' && pricePerUnit > 0 ? pricePerUnit : null,
+      promoType,
+      promoValue,
+      promoBuyX,
+      promoGetY,
+    };
+
+    const saveOffline = () => {
+      const localId = `offline-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      const offlineItem: OfflineTransactionPayload = {
+        id: localId,
+        createdAt: new Date().toISOString(),
+        payload,
+      };
+      const queue = loadOfflineQueue();
+      saveOfflineQueue([...queue, offlineItem]);
+      mergePendingTransactions([offlineItem]);
+      persistOfflineCache();
+      showAddModal.value = false;
+      resetTransactionForm();
+      setFlash(t('offlineSaved'), 'info');
+    };
+
+    if (isOffline()) {
+      saveOffline();
+      return;
+    }
+
     try {
       await $fetch('/api/transactions', {
         method: 'POST',
-        body: {
-          categoryId: formData.value.category,
-          walletId,
-          amount: formData.value.totalAmount,
-          date: formData.value.date,
-          productName: title,
-          note: formData.value.notes || null,
-          quantity: formData.value.type === 'expense' ? quantity : 1,
-          pricePerUnit: formData.value.type === 'expense' && pricePerUnit > 0 ? pricePerUnit : null,
-          promoType,
-          promoValue,
-          promoBuyX,
-          promoGetY,
-        },
+        body: payload,
       });
 
       showAddModal.value = false;
@@ -1568,6 +1989,10 @@ export const useMoneyManager = () => {
       await refreshData();
       setFlash(t('transactionSaved'), 'success');
     } catch (error) {
+      if (isOffline()) {
+        saveOffline();
+        return;
+      }
       setFlash(resolveErrorMessage(error, t('transactionSaveFailed')), 'error');
     }
   };
@@ -1628,7 +2053,7 @@ export const useMoneyManager = () => {
     const month = today.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    const data = [];
+    const data: WeeklyBucket[] = [];
     for (let start = 1, index = 0; start <= daysInMonth; start += 7, index += 1) {
       const end = Math.min(start + 6, daysInMonth);
       data.push({
@@ -1725,13 +2150,16 @@ export const useMoneyManager = () => {
     });
 
     return Object.keys(catMap)
-      .map((cat) => ({
-        name: cat,
-        amount: catMap[cat],
-        percent: totalExp === 0 ? '0%' : `${Math.round((catMap[cat] / totalExp) * 100)}%`,
-        color: colorMap[cat] || 'bg-blue-500',
-        icon: iconMap.get(cat) || 'fa-tag',
-      }))
+      .map((cat) => {
+        const amount = catMap[cat] || 0;
+        return {
+          name: cat,
+          amount,
+          percent: totalExp === 0 ? '0%' : `${Math.round((amount / totalExp) * 100)}%`,
+          color: colorMap[cat] || 'bg-blue-500',
+          icon: iconMap.get(cat) || 'fa-tag',
+        };
+      })
       .sort((a, b) => b.amount - a.amount);
   });
 
@@ -1756,13 +2184,16 @@ export const useMoneyManager = () => {
     });
 
     return Object.keys(catMap)
-      .map((cat) => ({
-        name: cat,
-        amount: catMap[cat],
-        percent: totalInc === 0 ? '0%' : `${Math.round((catMap[cat] / totalInc) * 100)}%`,
-        color: colorMap[cat] || 'bg-lime-400',
-        icon: iconMap.get(cat) || 'fa-tag',
-      }))
+      .map((cat) => {
+        const amount = catMap[cat] || 0;
+        return {
+          name: cat,
+          amount,
+          percent: totalInc === 0 ? '0%' : `${Math.round((amount / totalInc) * 100)}%`,
+          color: colorMap[cat] || 'bg-lime-400',
+          icon: iconMap.get(cat) || 'fa-tag',
+        };
+      })
       .sort((a, b) => b.amount - a.amount);
   });
 
@@ -1810,6 +2241,9 @@ export const useMoneyManager = () => {
   };
 
   const fetchAllTransactionsForMonth = async (monthKey: string) => {
+    if (isOffline()) {
+      return sortTransactionsByDate(getTransactionsForMonth(monthKey));
+    }
     const all: TransactionItem[] = [];
     const pageSize = 50;
     let page = 1;
