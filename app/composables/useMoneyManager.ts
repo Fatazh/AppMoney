@@ -536,6 +536,16 @@ export const useMoneyManager = () => {
       offlineSaved: 'Transaksi disimpan offline dan akan tersinkron saat online.',
       offlineNoCache: 'Anda offline dan belum ada data tersimpan.',
       offlineSyncFailed: 'Gagal sinkron transaksi offline. Akan dicoba lagi.',
+      scanReceipt: 'Scan Struk',
+      scanReceiptHint: 'Unggah foto struk (PNG/JPG).',
+      scanReceiptDisabled: 'OCR hanya bisa saat online.',
+      scanReceiptLoading: 'Memindai...',
+      scanReceiptUnsupported: 'Struk harus berupa gambar.',
+      scanReceiptTooLarge: 'Ukuran struk maksimal 1MB.',
+      scanReceiptFailed: 'Gagal memindai struk.',
+      scanReceiptNoText: 'Teks struk tidak ditemukan.',
+      scanReceiptMissingTotal: 'Total tidak ditemukan, isi manual.',
+      scanReceiptSuccess: 'Struk berhasil dipindai.',
       rateUnavailable: 'Gagal mengambil kurs terbaru, memakai kurs cadangan.',
       incomeBadge: 'Pemasukan',
       expenseBadge: 'Pengeluaran',
@@ -708,6 +718,16 @@ export const useMoneyManager = () => {
       offlineSaved: 'Transaction saved offline and will sync when online.',
       offlineNoCache: 'You are offline and no cached data is available.',
       offlineSyncFailed: 'Failed to sync offline transactions. Will retry.',
+      scanReceipt: 'Scan Receipt',
+      scanReceiptHint: 'Upload receipt photo (PNG/JPG).',
+      scanReceiptDisabled: 'OCR is only available online.',
+      scanReceiptLoading: 'Scanning...',
+      scanReceiptUnsupported: 'Receipt must be an image.',
+      scanReceiptTooLarge: 'Receipt size max 1MB.',
+      scanReceiptFailed: 'Failed to scan receipt.',
+      scanReceiptNoText: 'No text found on receipt.',
+      scanReceiptMissingTotal: 'Total not found, fill it manually.',
+      scanReceiptSuccess: 'Receipt scanned.',
       rateUnavailable: 'Unable to fetch latest rates, using fallback.',
       incomeBadge: 'Income',
       expenseBadge: 'Expense',
@@ -761,6 +781,7 @@ export const useMoneyManager = () => {
   const analyticsLoading = useState<boolean>('mm-analyticsLoading', () => false);
   const analyticsTableLoading = useState<boolean>('mm-analyticsTableLoading', () => false);
   const analyticsPageSize = 5;
+  const ocrLoading = useState<boolean>('mm-ocrLoading', () => false);
   const isOnline = useState<boolean>('mm-isOnline', () =>
     process.client ? navigator.onLine : true
   );
@@ -915,6 +936,177 @@ export const useMoneyManager = () => {
     if (abs >= 1000) return `${(converted / 1000).toFixed(0)}${isEnglish ? 'K' : 'rb'}`;
     if (preferredCurrency.value === 'USD') return converted.toFixed(2);
     return Math.round(converted).toString();
+  };
+
+  const parseReceiptDate = (lines: string[]) => {
+    for (const line of lines) {
+      const match = line.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+      if (!match) continue;
+      const day = Number(match[1]);
+      const month = Number(match[2]);
+      let year = Number(match[3]);
+      if (!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) continue;
+      if (year < 100) year += 2000;
+      if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    return null;
+  };
+
+  const parseAmountValue = (raw: string) => {
+    const cleaned = raw.replace(/[^\d.,]/g, '');
+    if (!cleaned) return null;
+    const hasDot = cleaned.includes('.');
+    const hasComma = cleaned.includes(',');
+    let normalized = cleaned;
+
+    if (hasDot && hasComma) {
+      const lastComma = cleaned.lastIndexOf(',');
+      const lastDot = cleaned.lastIndexOf('.');
+      if (lastComma > lastDot) {
+        normalized = cleaned.replace(/\./g, '').replace(',', '.');
+      } else {
+        normalized = cleaned.replace(/,/g, '').replace(/\./g, '.');
+      }
+    } else if (hasComma && !hasDot) {
+      normalized = /,\d{2}$/.test(cleaned) ? cleaned.replace(',', '.') : cleaned.replace(/,/g, '');
+    } else if (hasDot && !hasComma) {
+      normalized = /\.\d{2}$/.test(cleaned) ? cleaned : cleaned.replace(/\./g, '');
+    }
+
+    const value = Number(normalized);
+    if (!Number.isFinite(value)) return null;
+    return Math.round(value);
+  };
+
+  const parseReceiptTotal = (lines: string[]) => {
+    const totalKeywords = [
+      'grand total',
+      'total bayar',
+      'total belanja',
+      'total tagihan',
+      'total',
+      'jumlah',
+    ];
+    const avoidKeywords = ['subtotal', 'sub total', 'diskon', 'kembalian', 'change', 'cash', 'tunai'];
+    const amountRegex = /(\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d{2})?/g;
+
+    const candidates: Array<{ value: number; score: number }> = [];
+    lines.forEach((line) => {
+      const matches = line.match(amountRegex);
+      if (!matches) return;
+      const lower = line.toLowerCase();
+      let score = 0;
+      totalKeywords.forEach((kw) => {
+        if (lower.includes(kw)) score += 2;
+      });
+      avoidKeywords.forEach((kw) => {
+        if (lower.includes(kw)) score -= 1;
+      });
+
+      matches.forEach((raw) => {
+        const value = parseAmountValue(raw);
+        if (!value || value <= 0) return;
+        candidates.push({ value, score });
+      });
+    });
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => b.score - a.score || b.value - a.value);
+    return candidates[0]?.value ?? null;
+  };
+
+  const parseReceiptMerchant = (lines: string[]) => {
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (!/[a-zA-Z]/.test(line)) continue;
+      if (lower.startsWith('tel') || lower.startsWith('hp') || lower.startsWith('phone')) continue;
+      if (lower.includes('npwp') || lower.includes('tax')) continue;
+      return line.trim();
+    }
+    return null;
+  };
+
+  const extractReceiptFields = (text: string) => {
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+
+    return {
+      merchant: parseReceiptMerchant(lines),
+      date: parseReceiptDate(lines),
+      total: parseReceiptTotal(lines),
+    };
+  };
+
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve(typeof reader.result === 'string' ? reader.result : '');
+      };
+      reader.onerror = () => reject(new Error('read-failed'));
+      reader.readAsDataURL(file);
+    });
+
+  const scanReceipt = async (file: File) => {
+    if (!process.client) return;
+    if (ocrLoading.value) return;
+    if (!isOnline.value) {
+      setFlash(t('scanReceiptDisabled'), 'info');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setFlash(t('scanReceiptUnsupported'), 'error');
+      return;
+    }
+    const maxSize = 1024 * 1024;
+    if (file.size > maxSize) {
+      setFlash(t('scanReceiptTooLarge'), 'error');
+      return;
+    }
+
+    ocrLoading.value = true;
+    try {
+      const image = await readFileAsDataUrl(file);
+      if (!image) {
+        setFlash(t('scanReceiptFailed'), 'error');
+        return;
+      }
+
+      const data = await $fetch<{ text?: string }>('/api/ocr', {
+        method: 'POST',
+        body: { image, language: 'ind' },
+      });
+      const text = String(data?.text || '').trim();
+      if (!text) {
+        setFlash(t('scanReceiptNoText'), 'error');
+        return;
+      }
+
+      const parsed = extractReceiptFields(text);
+      if (parsed.date) {
+        formData.value.date = parsed.date;
+      }
+      if (parsed.merchant && !formData.value.productName.trim()) {
+        formData.value.productName = parsed.merchant;
+      }
+      if (parsed.total) {
+        formData.value.quantity = 1;
+        formData.value.pricePerItem = String(parsed.total);
+        formData.value.totalAmount = parsed.total;
+      } else {
+        setFlash(t('scanReceiptMissingTotal'), 'info');
+        return;
+      }
+
+      setFlash(t('scanReceiptSuccess'), 'success');
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('scanReceiptFailed')), 'error');
+    } finally {
+      ocrLoading.value = false;
+    }
   };
 
   const toggleNotifications = () => {
@@ -2432,6 +2624,9 @@ export const useMoneyManager = () => {
     statsDate,
     formatRupiah,
     formatShortRupiah,
+    isOnline,
+    ocrLoading,
+    scanReceipt,
     toggleNotifications,
     markAllNotificationsRead,
     markNotificationRead,
