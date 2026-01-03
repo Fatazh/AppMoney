@@ -8,14 +8,37 @@ const {
   incomeCategories,
   wallets,
   formatRupiah,
+  isOnline,
+  ocrLoading,
+  scanReceipt,
   handleSaveTransaction,
   resetTransactionForm,
+  setFlash,
   t,
 } = useMoneyManager();
 
 resetTransactionForm();
 
 const showCategoryPicker = ref(false);
+const receiptInput = ref<HTMLInputElement | null>(null);
+
+const ocrDisabled = computed(() => !isOnline.value || ocrLoading.value);
+
+const triggerReceiptPicker = () => {
+  if (!isOnline.value) {
+    setFlash(t('scanReceiptDisabled'), 'info');
+    return;
+  }
+  receiptInput.value?.click();
+};
+
+const handleReceiptChange = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+  void scanReceipt(file);
+  target.value = '';
+};
 
 const categoryOptions = computed(() =>
   formData.value.type === 'expense' ? expenseCategories.value : incomeCategories.value
@@ -154,12 +177,33 @@ watch(
             </div>
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('productName') }}</label>
+            <div class="flex items-center justify-between mb-1 ml-1">
+              <label class="block text-xs text-gray-400">{{ t('productName') }}</label>
+              <button
+                type="button"
+                class="text-[10px] font-semibold flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 text-slate-600 hover:border-lime-400 hover:text-lime-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="ocrDisabled"
+                @click="triggerReceiptPicker"
+              >
+                <i class="fas fa-receipt"></i>
+                {{ ocrLoading ? t('scanReceiptLoading') : t('scanReceipt') }}
+              </button>
+            </div>
             <input
               v-model="formData.productName"
               type="text"
               :placeholder="t('productExample')"
               class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
+            />
+            <p class="text-[10px] text-gray-400 mt-1 ml-1">
+              {{ isOnline ? t('scanReceiptHint') : t('scanReceiptDisabled') }}
+            </p>
+            <input
+              ref="receiptInput"
+              type="file"
+              accept="image/*"
+              class="hidden"
+              @change="handleReceiptChange"
             />
           </div>
           <div>

@@ -24,6 +24,8 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     exchangeRateApiKey: process.env.EXCHANGE_RATE_API_KEY,
+    ocrApiKey: process.env.OCR_SPACE_API_KEY,
+    ocrApiUrl: process.env.OCR_SPACE_API_URL,
     public: {
       webPushPublicKey: process.env.WEB_PUSH_PUBLIC_KEY,
     },
