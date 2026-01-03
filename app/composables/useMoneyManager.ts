@@ -223,6 +223,12 @@ interface OfflineCache {
   updatedAt: string;
 }
 
+interface OfflineSession {
+  version: number;
+  user: UserInfo;
+  updatedAt: string;
+}
+
 const walletTypeMapToUi: Record<DbWalletType, WalletType> = {
   CASH: 'Cash',
   BANK: 'Bank',
@@ -266,6 +272,8 @@ const getTodayString = () => new Date().toISOString().slice(0, 10);
 const offlineCacheKey = 'mm-offline-cache-v1';
 const offlineQueueKey = 'mm-offline-queue-v1';
 const offlineCacheVersion = 1;
+const offlineSessionKey = 'mm-offline-session-v1';
+const offlineSessionVersion = 1;
 
 export const useMoneyManager = () => {
   const currentUser = useState<UserInfo | null>('mm-user', () => null);
@@ -1053,6 +1061,22 @@ export const useMoneyManager = () => {
     return cached;
   };
 
+  const loadOfflineSession = () => {
+    const cached = readStorage<OfflineSession | null>(offlineSessionKey, null);
+    if (!cached || cached.version !== offlineSessionVersion) return null;
+    return cached.user || null;
+  };
+
+  const persistOfflineSession = () => {
+    if (!currentUser.value) return;
+    const payload: OfflineSession = {
+      version: offlineSessionVersion,
+      user: currentUser.value,
+      updatedAt: new Date().toISOString(),
+    };
+    writeStorage(offlineSessionKey, payload);
+  };
+
   const persistOfflineCache = () => {
     if (!currentUser.value) return;
     const payload: OfflineCache = {
@@ -1066,10 +1090,15 @@ export const useMoneyManager = () => {
       updatedAt: new Date().toISOString(),
     };
     writeStorage(offlineCacheKey, payload);
+    persistOfflineSession();
   };
 
   const clearOfflineCache = () => {
     removeStorage(offlineCacheKey);
+  };
+
+  const clearOfflineSession = () => {
+    removeStorage(offlineSessionKey);
   };
 
   const applyOfflineCache = (cache: OfflineCache) => {
@@ -1083,6 +1112,19 @@ export const useMoneyManager = () => {
     notificationsHasMore.value = false;
     updateHasUnread();
     if (cache.user?.currency && cache.user.currency !== 'IDR') {
+      void loadExchangeRates();
+    }
+  };
+
+  const applyOfflineSession = (user: UserInfo) => {
+    currentUser.value = user;
+    wallets.value = [];
+    expenseCategories.value = [];
+    incomeCategories.value = [];
+    transactions.value = [];
+    notifications.value = [];
+    updateHasUnread();
+    if (user?.currency && user.currency !== 'IDR') {
       void loadExchangeRates();
     }
   };
@@ -1319,6 +1361,10 @@ export const useMoneyManager = () => {
     setFlash(message, 'error');
   };
 
+  const cacheOfflineSession = () => {
+    persistOfflineSession();
+  };
+
   const fetchBootstrap = async () => {
     const headers = process.server ? useRequestHeaders(['cookie']) : undefined;
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -1395,6 +1441,13 @@ export const useMoneyManager = () => {
           setFlash(t('offlineMode'), 'info');
           return;
         }
+        const sessionUser = loadOfflineSession();
+        if (sessionUser) {
+          applyOfflineSession(sessionUser);
+          bootstrapped.value = true;
+          setFlash(t('offlineNoCache'), 'info');
+          return;
+        }
         throw new Error('offline-no-cache');
       }
 
@@ -1407,16 +1460,23 @@ export const useMoneyManager = () => {
         bootstrapped.value = true;
         setFlash(t('offlineMode'), 'info');
       } else {
-        console.error('Bootstrap error', error);
-        currentUser.value = null;
-        wallets.value = [];
-        expenseCategories.value = [];
-        incomeCategories.value = [];
-        transactions.value = [];
-        notifications.value = [];
-        hasUnread.value = false;
-        bootstrapped.value = false;
-        setFlash(isOffline() ? t('offlineNoCache') : t('loadFailed'), 'error');
+        const sessionUser = isOffline() ? loadOfflineSession() : null;
+        if (sessionUser) {
+          applyOfflineSession(sessionUser);
+          bootstrapped.value = true;
+          setFlash(t('offlineNoCache'), 'info');
+        } else {
+          console.error('Bootstrap error', error);
+          currentUser.value = null;
+          wallets.value = [];
+          expenseCategories.value = [];
+          incomeCategories.value = [];
+          transactions.value = [];
+          notifications.value = [];
+          hasUnread.value = false;
+          bootstrapped.value = false;
+          setFlash(isOffline() ? t('offlineNoCache') : t('loadFailed'), 'error');
+        }
       }
     } finally {
       bootstrapping.value = false;
@@ -1589,6 +1649,7 @@ export const useMoneyManager = () => {
     analyticsTableLoading.value = false;
     clearOfflineCache();
     clearOfflineQueue();
+    clearOfflineSession();
     offlineQueueLoaded.value = false;
     syncingQueue.value = false;
     pendingSyncRefresh.value = false;
@@ -2377,6 +2438,7 @@ export const useMoneyManager = () => {
     refreshNotifications,
     loadMoreNotifications,
     ensureLoaded,
+    cacheOfflineSession,
     refreshData,
     setFlash,
     clearFlash,

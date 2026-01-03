@@ -1,7 +1,7 @@
 export default defineNuxtRouteMiddleware(async (to) => {
   if (to.path.startsWith('/auth')) return;
 
-  const { ensureLoaded, currentUser } = useMoneyManager();
+  const { ensureLoaded, currentUser, cacheOfflineSession } = useMoneyManager();
   if (process.client && !navigator.onLine) {
     await ensureLoaded();
     if (!currentUser.value) {
@@ -27,6 +27,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
 
     currentUser.value = response.user;
+    cacheOfflineSession();
   }
 
   void ensureLoaded();
