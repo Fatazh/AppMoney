@@ -261,7 +261,7 @@ const resolveTransactionIcon = (category: string, type: TransactionType) => {
   return type === 'income' ? 'fa-briefcase' : 'fa-shopping-bag';
 };
 
-const getTodayString = () => new Date().toISOString().split('T')[0];
+const getTodayString = () => new Date().toISOString().slice(0, 10);
 
 const offlineCacheKey = 'mm-offline-cache-v1';
 const offlineQueueKey = 'mm-offline-queue-v1';
@@ -287,9 +287,11 @@ export const useMoneyManager = () => {
 
   const initials = computed(() => {
     const parts = displayName.value.split(' ').filter(Boolean);
-    if (parts.length === 0) return 'MM';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    const first = parts[0]?.[0];
+    const second = parts[1]?.[0];
+    if (first && second) return `${first}${second}`.toUpperCase();
+    if (parts[0]) return parts[0].slice(0, 2).toUpperCase();
+    return 'MM';
   });
 
   const avatarUrl = computed(() => {
@@ -711,7 +713,7 @@ export const useMoneyManager = () => {
 
   const t = (key: TranslationKey, params?: Record<string, string | number>) => {
     const lang = preferredLanguage.value;
-    let text = translations[lang]?.[key] || translations.id[key] || key;
+    let text: string = translations[lang]?.[key] || translations.id[key] || key;
     if (params) {
       Object.entries(params).forEach(([param, value]) => {
         text = text.replace(new RegExp(`\\{${param}\\}`, 'g'), String(value));
@@ -1942,11 +1944,13 @@ export const useMoneyManager = () => {
     const quantity = Math.max(1, Math.floor(parseFloat(String(formData.value.quantity)) || 1));
     const pricePerUnit = parseFloat(String(formData.value.pricePerItem)) || 0;
 
+    const transactionDate = formData.value.date || getTodayString();
+
     const payload = {
       categoryId: formData.value.category,
       walletId,
       amount: formData.value.totalAmount,
-      date: formData.value.date,
+      date: transactionDate,
       productName: title,
       note: formData.value.notes || null,
       quantity: formData.value.type === 'expense' ? quantity : 1,
