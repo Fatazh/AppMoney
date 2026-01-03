@@ -8,8 +8,11 @@ const toNumber = (value: any) => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const [categories, wallets, transactions, notifications] = await prisma.$transaction([
+  const [categories, wallets, transactionsAll, transactionsMonth, notifications] = await prisma.$transaction([
     prisma.category.findMany({
       where: { userId: user.id },
       select: { id: true, name: true, type: true, icon: true },
@@ -22,6 +25,14 @@ export default defineEventHandler(async (event) => {
     }),
     prisma.transaction.findMany({
       where: { userId: user.id },
+      select: {
+        amount: true,
+        walletId: true,
+        category: { select: { type: true } },
+      },
+    }),
+    prisma.transaction.findMany({
+      where: { userId: user.id, date: { gte: monthStart, lt: monthEnd } },
       select: {
         id: true,
         amount: true,
@@ -49,17 +60,38 @@ export default defineEventHandler(async (event) => {
   ]);
 
   const walletTotals = new Map<string, number>();
+  const walletIncomeTotals = new Map<string, number>();
+  const walletExpenseTotals = new Map<string, number>();
   wallets.forEach((wallet) => {
     walletTotals.set(wallet.id, toNumber(wallet.initialBalance));
+    walletIncomeTotals.set(wallet.id, 0);
+    walletExpenseTotals.set(wallet.id, 0);
   });
 
-  const mappedTransactions = transactions.map((tx) => {
+  transactionsAll.forEach((tx) => {
     const amount = toNumber(tx.amount);
     const isExpense = tx.category.type === 'EXPENSE';
     const signedAmount = isExpense ? -amount : amount;
-    if (tx.wallet?.id && walletTotals.has(tx.wallet.id)) {
-      walletTotals.set(tx.wallet.id, (walletTotals.get(tx.wallet.id) || 0) + signedAmount);
+    if (tx.walletId && walletTotals.has(tx.walletId)) {
+      walletTotals.set(tx.walletId, (walletTotals.get(tx.walletId) || 0) + signedAmount);
+      if (isExpense) {
+        walletExpenseTotals.set(
+          tx.walletId,
+          (walletExpenseTotals.get(tx.walletId) || 0) + amount
+        );
+      } else {
+        walletIncomeTotals.set(
+          tx.walletId,
+          (walletIncomeTotals.get(tx.walletId) || 0) + amount
+        );
+      }
     }
+  });
+
+  const mappedTransactions = transactionsMonth.map((tx) => {
+    const amount = toNumber(tx.amount);
+    const isExpense = tx.category.type === 'EXPENSE';
+    const signedAmount = isExpense ? -amount : amount;
 
     return {
       id: tx.id,
@@ -90,6 +122,8 @@ export default defineEventHandler(async (event) => {
     type: wallet.type,
     initialBalance: toNumber(wallet.initialBalance),
     balance: walletTotals.get(wallet.id) ?? toNumber(wallet.initialBalance),
+    incomeTotal: walletIncomeTotals.get(wallet.id) ?? 0,
+    expenseTotal: walletExpenseTotals.get(wallet.id) ?? 0,
   }));
 
   return {

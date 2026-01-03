@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const name = String(body?.name || '').trim();
   const type = String(body?.type || '').toUpperCase();
   const rawBalance = Number(body?.initialBalance || 0);
-  const initialBalance = Number.isFinite(rawBalance) ? rawBalance : 0;
+  const initialBalance = Number.isFinite(rawBalance) ? Math.round(rawBalance * 100) / 100 : 0;
 
   if (!name) {
     throw createError({ statusCode: 400, statusMessage: 'Nama dompet wajib diisi.' });
@@ -19,6 +19,9 @@ export default defineEventHandler(async (event) => {
 
   if (!validTypes.has(type)) {
     throw createError({ statusCode: 400, statusMessage: 'Tipe dompet tidak valid.' });
+  }
+  if (initialBalance < 0) {
+    throw createError({ statusCode: 400, statusMessage: 'Saldo awal tidak boleh kurang dari 0.' });
   }
 
   const existing = await prisma.wallet.findFirst({

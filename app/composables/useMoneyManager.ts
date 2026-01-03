@@ -42,6 +42,8 @@ interface WalletItem {
   balance: number;
   color: string;
   icon: string;
+  incomeTotal?: number;
+  expenseTotal?: number;
 }
 
 interface TransactionItem {
@@ -63,6 +65,7 @@ interface TransactionItem {
   promoValue: number | null;
   promoBuyX: number | null;
   promoGetY: number | null;
+  pending?: boolean;
 }
 
 interface CategoryItem {
@@ -116,6 +119,26 @@ interface ExchangeRatesState {
   updatedAt: number;
 }
 
+interface AnalyticsSummary {
+  income: number;
+  expense: number;
+  net: number;
+}
+
+interface WeeklyBucket {
+  week: number;
+  startDay: number;
+  endDay: number;
+  income: number;
+  expense: number;
+}
+
+interface WeeklyChart {
+  data: WeeklyBucket[];
+  maxVal: number;
+  daysInMonth: number;
+}
+
 interface BootstrapPayload {
   user: UserInfo;
   wallets: Array<{
@@ -124,6 +147,8 @@ interface BootstrapPayload {
     type: DbWalletType;
     initialBalance: number;
     balance: number;
+    incomeTotal?: number;
+    expenseTotal?: number;
   }>;
   categories: Array<{
     id: string;
@@ -165,6 +190,45 @@ interface BootstrapPayload {
   }>;
 }
 
+type NotificationPayload = BootstrapPayload['notifications'][number];
+type TransactionPayload = BootstrapPayload['transactions'][number];
+
+interface OfflineTransactionPayload {
+  id: string;
+  createdAt: string;
+  payload: {
+    categoryId: string;
+    walletId: string;
+    amount: number;
+    date: string;
+    productName: string;
+    note: string | null;
+    quantity: number;
+    pricePerUnit: number | null;
+    promoType: string | null;
+    promoValue: number | null;
+    promoBuyX: number | null;
+    promoGetY: number | null;
+  };
+}
+
+interface OfflineCache {
+  version: number;
+  user: UserInfo;
+  wallets: WalletItem[];
+  expenseCategories: CategoryItem[];
+  incomeCategories: CategoryItem[];
+  transactions: TransactionItem[];
+  notifications: NotificationItem[];
+  updatedAt: string;
+}
+
+interface OfflineSession {
+  version: number;
+  user: UserInfo;
+  updatedAt: string;
+}
+
 const walletTypeMapToUi: Record<DbWalletType, WalletType> = {
   CASH: 'Cash',
   BANK: 'Bank',
@@ -203,7 +267,13 @@ const resolveTransactionIcon = (category: string, type: TransactionType) => {
   return type === 'income' ? 'fa-briefcase' : 'fa-shopping-bag';
 };
 
-const getTodayString = () => new Date().toISOString().split('T')[0];
+const getTodayString = () => new Date().toISOString().slice(0, 10);
+
+const offlineCacheKey = 'mm-offline-cache-v1';
+const offlineQueueKey = 'mm-offline-queue-v1';
+const offlineCacheVersion = 1;
+const offlineSessionKey = 'mm-offline-session-v1';
+const offlineSessionVersion = 1;
 
 export const useMoneyManager = () => {
   const currentUser = useState<UserInfo | null>('mm-user', () => null);
@@ -225,9 +295,11 @@ export const useMoneyManager = () => {
 
   const initials = computed(() => {
     const parts = displayName.value.split(' ').filter(Boolean);
-    if (parts.length === 0) return 'MM';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    const first = parts[0]?.[0];
+    const second = parts[1]?.[0];
+    if (first && second) return `${first}${second}`.toUpperCase();
+    if (parts[0]) return parts[0].slice(0, 2).toUpperCase();
+    return 'MM';
   });
 
   const avatarUrl = computed(() => {
@@ -303,6 +375,8 @@ export const useMoneyManager = () => {
       preferences: 'Preferensi',
       notifications: 'Notifikasi',
       notificationsOff: 'Notifikasi sedang dimatikan.',
+      noNotifications: 'Belum ada notifikasi.',
+      loadMore: 'Lihat lebih banyak',
       markReadFailed: 'Gagal menandai notifikasi dibaca.',
       pushNotSupported: 'Browser tidak mendukung notifikasi.',
       pushKeyMissing: 'Kunci push belum diatur.',
@@ -458,16 +532,23 @@ export const useMoneyManager = () => {
       logout: 'Keluar',
       appVersion: 'Versi Aplikasi {version} - MoneyKu Inc.',
       loadFailed: 'Gagal memuat data. Coba muat ulang.',
+      offlineMode: 'Sedang offline, menampilkan data tersimpan.',
+      offlineSaved: 'Transaksi disimpan offline dan akan tersinkron saat online.',
+      offlineNoCache: 'Anda offline dan belum ada data tersimpan.',
+      offlineSyncFailed: 'Gagal sinkron transaksi offline. Akan dicoba lagi.',
       rateUnavailable: 'Gagal mengambil kurs terbaru, memakai kurs cadangan.',
       incomeBadge: 'Pemasukan',
       expenseBadge: 'Pengeluaran',
       downloadCsv: 'Excel (.csv)',
       downloadPdf: 'PDF / Print',
+      noDataToExport: 'Tidak ada data untuk diekspor.',
     },
     en: {
       preferences: 'Preferences',
       notifications: 'Notifications',
       notificationsOff: 'Notifications are turned off.',
+      noNotifications: 'No notifications yet.',
+      loadMore: 'Load more',
       markReadFailed: 'Failed to mark notifications as read.',
       pushNotSupported: 'Browser does not support notifications.',
       pushKeyMissing: 'Push key is not configured.',
@@ -623,11 +704,16 @@ export const useMoneyManager = () => {
       logout: 'Sign Out',
       appVersion: 'App Version {version} - MoneyKu Inc.',
       loadFailed: 'Failed to load data. Please refresh.',
+      offlineMode: 'You are offline, showing cached data.',
+      offlineSaved: 'Transaction saved offline and will sync when online.',
+      offlineNoCache: 'You are offline and no cached data is available.',
+      offlineSyncFailed: 'Failed to sync offline transactions. Will retry.',
       rateUnavailable: 'Unable to fetch latest rates, using fallback.',
       incomeBadge: 'Income',
       expenseBadge: 'Expense',
       downloadCsv: 'Excel (.csv)',
       downloadPdf: 'PDF / Print',
+      noDataToExport: 'No data to export.',
     },
   } as const;
 
@@ -635,7 +721,7 @@ export const useMoneyManager = () => {
 
   const t = (key: TranslationKey, params?: Record<string, string | number>) => {
     const lang = preferredLanguage.value;
-    let text = translations[lang]?.[key] || translations.id[key] || key;
+    let text: string = translations[lang]?.[key] || translations.id[key] || key;
     if (params) {
       Object.entries(params).forEach(([param, value]) => {
         text = text.replace(new RegExp(`\\{${param}\\}`, 'g'), String(value));
@@ -652,11 +738,37 @@ export const useMoneyManager = () => {
   };
 
   const notifications = useState<NotificationItem[]>('mm-notifications', () => []);
+  const notificationsCursor = useState<string | null>('mm-notificationsCursor', () => null);
+  const notificationsHasMore = useState<boolean>('mm-notificationsHasMore', () => false);
 
   const wallets = useState<WalletItem[]>('mm-wallets', () => []);
   const expenseCategories = useState<CategoryItem[]>('mm-expenseCategories', () => []);
   const incomeCategories = useState<CategoryItem[]>('mm-incomeCategories', () => []);
   const transactions = useState<TransactionItem[]>('mm-transactions', () => []);
+  const analyticsSummary = useState<AnalyticsSummary>('mm-analyticsSummary', () => ({
+    income: 0,
+    expense: 0,
+    net: 0,
+  }));
+  const analyticsWeekly = useState<WeeklyChart>('mm-analyticsWeekly', () => ({
+    data: [],
+    maxVal: 1,
+    daysInMonth: 0,
+  }));
+  const analyticsTransactions = useState<TransactionItem[]>('mm-analyticsTransactions', () => []);
+  const analyticsTotal = useState<number>('mm-analyticsTotal', () => 0);
+  const analyticsPage = useState<number>('mm-analyticsPage', () => 1);
+  const analyticsLoading = useState<boolean>('mm-analyticsLoading', () => false);
+  const analyticsTableLoading = useState<boolean>('mm-analyticsTableLoading', () => false);
+  const analyticsPageSize = 5;
+  const isOnline = useState<boolean>('mm-isOnline', () =>
+    process.client ? navigator.onLine : true
+  );
+  const connectionReady = useState<boolean>('mm-connectionReady', () => false);
+  const offlineQueue = useState<OfflineTransactionPayload[]>('mm-offlineQueue', () => []);
+  const offlineQueueLoaded = useState<boolean>('mm-offlineQueueLoaded', () => false);
+  const syncingQueue = useState<boolean>('mm-offlineSyncing', () => false);
+  const pendingSyncRefresh = useState<boolean>('mm-offlineSyncRefresh', () => false);
   const allCategories = computed(() => [...expenseCategories.value, ...incomeCategories.value]);
 
   const showAddModal = useState<boolean>('mm-showAddModal', () => false);
@@ -741,6 +853,43 @@ export const useMoneyManager = () => {
     return parsed.toLocaleString(preferredLocale.value);
   };
 
+  const mapNotifications = (items: NotificationPayload[]) =>
+    items.map((notif) => ({
+      id: notif.id,
+      title: notif.title,
+      message: notif.message,
+      time: formatNotificationTime(notif.createdAt),
+      type: normalizeNotificationType(notif.type),
+      read: notif.read,
+    }));
+
+  const mapTransactions = (items: TransactionPayload[]) =>
+    items.map((tx) => {
+      const txType: TransactionType = tx.category.type === 'INCOME' ? 'income' : 'expense';
+      const title = (tx.productName || tx.category.name || '').trim() || tx.category.name;
+      const icon = tx.category.icon || resolveTransactionIcon(tx.category.name, txType);
+      return {
+        id: tx.id,
+        title,
+        category: tx.category.name,
+        categoryId: tx.category.id,
+        type: txType,
+        amount: Number(tx.amount || 0),
+        date: tx.date,
+        createdAt: tx.createdAt || tx.date,
+        icon,
+        wallet: tx.wallet?.name || '-',
+        walletId: tx.wallet?.id || null,
+        note: tx.note || null,
+        quantity: tx.quantity ?? 1,
+        pricePerUnit: tx.pricePerUnit ?? null,
+        promoType: tx.promoType ?? null,
+        promoValue: tx.promoValue ?? null,
+        promoBuyX: tx.promoBuyX ?? null,
+        promoGetY: tx.promoGetY ?? null,
+      };
+    });
+
   const updateHasUnread = () => {
     hasUnread.value = notifications.value.some((notif) => !notif.read);
   };
@@ -782,6 +931,7 @@ export const useMoneyManager = () => {
       await $fetch('/api/notifications/read', { method: 'PUT' });
       notifications.value = notifications.value.map((notif) => ({ ...notif, read: true }));
       updateHasUnread();
+      persistOfflineCache();
     } catch (error) {
       setFlash(resolveErrorMessage(error, t('markReadFailed')), 'error');
     }
@@ -799,6 +949,42 @@ export const useMoneyManager = () => {
       target.read = false;
       updateHasUnread();
       setFlash(resolveErrorMessage(error, t('markReadFailed')), 'error');
+    } finally {
+      persistOfflineCache();
+    }
+  };
+
+  const refreshNotifications = async (limit = 50) => {
+    try {
+      const data = await $fetch<{
+        notifications: NotificationPayload[];
+        nextCursor?: string | null;
+      }>(`/api/notifications?limit=${limit}`);
+      notifications.value = mapNotifications(data.notifications || []);
+      notificationsCursor.value = data.nextCursor || null;
+      notificationsHasMore.value = Boolean(data.nextCursor);
+      updateHasUnread();
+      persistOfflineCache();
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
+    }
+  };
+
+  const loadMoreNotifications = async (limit = 50) => {
+    if (!notificationsHasMore.value || !notificationsCursor.value) return;
+    try {
+      const data = await $fetch<{
+        notifications: NotificationPayload[];
+        nextCursor?: string | null;
+      }>(`/api/notifications?limit=${limit}&cursor=${encodeURIComponent(notificationsCursor.value)}`);
+      const nextItems = mapNotifications(data.notifications || []);
+      notifications.value = [...notifications.value, ...nextItems];
+      notificationsCursor.value = data.nextCursor || null;
+      notificationsHasMore.value = Boolean(data.nextCursor);
+      updateHasUnread();
+      persistOfflineCache();
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
     }
   };
 
@@ -815,6 +1001,247 @@ export const useMoneyManager = () => {
     error?.data?.message ||
     error?.message ||
     fallback;
+
+  const isClient = typeof window !== 'undefined';
+  const isOffline = () => isClient && !isOnline.value;
+
+  const readStorage = <T,>(key: string, fallback: T) => {
+    if (!isClient) return fallback;
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) return fallback;
+      return JSON.parse(raw) as T;
+    } catch (error) {
+      return fallback;
+    }
+  };
+
+  const writeStorage = (key: string, value: unknown) => {
+    if (!isClient) return;
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      // Ignore storage errors (quota, private mode).
+    }
+  };
+
+  const removeStorage = (key: string) => {
+    if (!isClient) return;
+    try {
+      window.localStorage.removeItem(key);
+    } catch (error) {
+      // Ignore storage errors.
+    }
+  };
+
+  const loadOfflineQueue = () => {
+    if (!isClient) return [] as OfflineTransactionPayload[];
+    if (offlineQueueLoaded.value) return offlineQueue.value;
+    const saved = readStorage<OfflineTransactionPayload[]>(offlineQueueKey, []);
+    offlineQueue.value = Array.isArray(saved) ? saved : [];
+    offlineQueueLoaded.value = true;
+    return offlineQueue.value;
+  };
+
+  const saveOfflineQueue = (items: OfflineTransactionPayload[]) => {
+    offlineQueue.value = items;
+    offlineQueueLoaded.value = true;
+    writeStorage(offlineQueueKey, items);
+  };
+
+  const clearOfflineQueue = () => {
+    offlineQueue.value = [];
+    offlineQueueLoaded.value = true;
+    removeStorage(offlineQueueKey);
+  };
+
+  const loadOfflineCache = () => {
+    const cached = readStorage<OfflineCache | null>(offlineCacheKey, null);
+    if (!cached || cached.version !== offlineCacheVersion) return null;
+    return cached;
+  };
+
+  const loadOfflineSession = () => {
+    const cached = readStorage<OfflineSession | null>(offlineSessionKey, null);
+    if (!cached || cached.version !== offlineSessionVersion) return null;
+    return cached.user || null;
+  };
+
+  const persistOfflineSession = () => {
+    if (!currentUser.value) return;
+    const payload: OfflineSession = {
+      version: offlineSessionVersion,
+      user: currentUser.value,
+      updatedAt: new Date().toISOString(),
+    };
+    writeStorage(offlineSessionKey, payload);
+  };
+
+  const persistOfflineCache = () => {
+    if (!currentUser.value) return;
+    const payload: OfflineCache = {
+      version: offlineCacheVersion,
+      user: currentUser.value,
+      wallets: wallets.value,
+      expenseCategories: expenseCategories.value,
+      incomeCategories: incomeCategories.value,
+      transactions: transactions.value,
+      notifications: notifications.value,
+      updatedAt: new Date().toISOString(),
+    };
+    writeStorage(offlineCacheKey, payload);
+    persistOfflineSession();
+  };
+
+  const clearOfflineCache = () => {
+    removeStorage(offlineCacheKey);
+  };
+
+  const clearOfflineSession = () => {
+    removeStorage(offlineSessionKey);
+  };
+
+  const applyOfflineCache = (cache: OfflineCache) => {
+    currentUser.value = cache.user || null;
+    wallets.value = cache.wallets || [];
+    expenseCategories.value = cache.expenseCategories || [];
+    incomeCategories.value = cache.incomeCategories || [];
+    transactions.value = cache.transactions || [];
+    notifications.value = cache.notifications || [];
+    notificationsCursor.value = null;
+    notificationsHasMore.value = false;
+    updateHasUnread();
+    if (cache.user?.currency && cache.user.currency !== 'IDR') {
+      void loadExchangeRates();
+    }
+  };
+
+  const applyOfflineSession = (user: UserInfo) => {
+    currentUser.value = user;
+    wallets.value = [];
+    expenseCategories.value = [];
+    incomeCategories.value = [];
+    transactions.value = [];
+    notifications.value = [];
+    updateHasUnread();
+    if (user?.currency && user.currency !== 'IDR') {
+      void loadExchangeRates();
+    }
+  };
+
+  const applyPendingToWallet = (walletId: string, signedAmount: number) => {
+    const wallet = wallets.value.find((item) => item.id === walletId);
+    if (!wallet) return;
+    wallet.balance = Number(wallet.balance || 0) + signedAmount;
+    if (signedAmount > 0 && typeof wallet.incomeTotal === 'number') {
+      wallet.incomeTotal += signedAmount;
+    }
+    if (signedAmount < 0 && typeof wallet.expenseTotal === 'number') {
+      wallet.expenseTotal += Math.abs(signedAmount);
+    }
+  };
+
+  const buildLocalTransaction = (item: OfflineTransactionPayload) => {
+    const category = allCategories.value.find((cat) => cat.id === item.payload.categoryId);
+    const type: TransactionType = category?.type === 'income' ? 'income' : 'expense';
+    const amount = type === 'income' ? item.payload.amount : -item.payload.amount;
+    const title = item.payload.productName?.trim() || category?.name || 'Transaksi';
+    const icon = category?.icon || resolveTransactionIcon(category?.name || '', type);
+    const wallet = wallets.value.find((w) => w.id === item.payload.walletId);
+
+    return {
+      id: item.id,
+      title,
+      category: category?.name || 'Kategori',
+      categoryId: item.payload.categoryId,
+      type,
+      amount,
+      date: item.payload.date,
+      createdAt: item.createdAt,
+      icon,
+      wallet: wallet?.name || '-',
+      walletId: wallet?.id || null,
+      note: item.payload.note ?? null,
+      quantity: item.payload.quantity ?? 1,
+      pricePerUnit: item.payload.pricePerUnit ?? null,
+      promoType: item.payload.promoType ?? null,
+      promoValue: item.payload.promoValue ?? null,
+      promoBuyX: item.payload.promoBuyX ?? null,
+      promoGetY: item.payload.promoGetY ?? null,
+      pending: true,
+    };
+  };
+
+  const mergePendingTransactions = (queue: OfflineTransactionPayload[]) => {
+    if (!queue.length) return;
+    const existing = new Set(transactions.value.map((tx) => tx.id));
+    const additions: TransactionItem[] = [];
+
+    queue.forEach((item) => {
+      if (existing.has(item.id)) return;
+      const localTx = buildLocalTransaction(item);
+      additions.push(localTx);
+      applyPendingToWallet(item.payload.walletId, localTx.amount);
+    });
+
+    if (additions.length) {
+      transactions.value = [...additions, ...transactions.value];
+    }
+  };
+
+  const setupConnectionListeners = () => {
+    if (!isClient || connectionReady.value) return;
+    connectionReady.value = true;
+    isOnline.value = navigator.onLine;
+
+    window.addEventListener('online', () => {
+      isOnline.value = true;
+      void syncPendingTransactions();
+    });
+
+    window.addEventListener('offline', () => {
+      isOnline.value = false;
+    });
+  };
+
+  const syncPendingTransactions = async () => {
+    if (!isClient || syncingQueue.value) return;
+    if (!isOnline.value) return;
+    const queue = loadOfflineQueue();
+    if (queue.length === 0) return;
+
+    syncingQueue.value = true;
+    const remaining: OfflineTransactionPayload[] = [];
+    let syncedCount = 0;
+
+    try {
+      for (const item of queue) {
+        try {
+          await $fetch('/api/transactions', {
+            method: 'POST',
+            body: item.payload,
+          });
+          syncedCount += 1;
+        } catch (error) {
+          remaining.push(item);
+        }
+      }
+
+      saveOfflineQueue(remaining);
+      if (syncedCount > 0) {
+        if (bootstrapping.value) {
+          pendingSyncRefresh.value = true;
+        } else {
+          await refreshData();
+        }
+      }
+      if (remaining.length > 0) {
+        setFlash(t('offlineSyncFailed'), 'error');
+      }
+    } finally {
+      syncingQueue.value = false;
+    }
+  };
 
   const isPushSupported = () =>
     typeof window !== 'undefined' &&
@@ -931,9 +1358,11 @@ export const useMoneyManager = () => {
 
   const handleApiError = (error: any, fallback: string) => {
     const message = resolveErrorMessage(error, fallback);
-    if (typeof window !== 'undefined') {
-      alert(message);
-    }
+    setFlash(message, 'error');
+  };
+
+  const cacheOfflineSession = () => {
+    persistOfflineSession();
   };
 
   const fetchBootstrap = async () => {
@@ -951,7 +1380,7 @@ export const useMoneyManager = () => {
         void loadExchangeRates();
       }
 
-      const categoryItems = (data.categories || []).map((cat) => ({
+      const categoryItems: CategoryItem[] = (data.categories || []).map((cat) => ({
         id: cat.id,
         name: cat.name,
         type: cat.type === 'INCOME' ? 'income' : 'expense',
@@ -969,52 +1398,29 @@ export const useMoneyManager = () => {
           name: wallet.name,
           type: uiType,
           balance: Number(wallet.balance || 0),
+          incomeTotal: typeof wallet.incomeTotal === 'number' ? wallet.incomeTotal : undefined,
+          expenseTotal: typeof wallet.expenseTotal === 'number' ? wallet.expenseTotal : undefined,
           color: meta.color,
           icon: meta.icon,
         };
       });
 
-      transactions.value = (data.transactions || []).map((tx) => {
-        const txType: TransactionType = tx.category.type === 'INCOME' ? 'income' : 'expense';
-        const title = (tx.productName || tx.category.name || '').trim() || tx.category.name;
-        const icon = tx.category.icon || resolveTransactionIcon(tx.category.name, txType);
-        return {
-          id: tx.id,
-          title,
-          category: tx.category.name,
-          categoryId: tx.category.id,
-          type: txType,
-          amount: Number(tx.amount || 0),
-          date: tx.date,
-          createdAt: tx.createdAt || tx.date,
-          icon,
-          wallet: tx.wallet?.name || '-',
-          walletId: tx.wallet?.id || null,
-          note: tx.note || null,
-          quantity: tx.quantity ?? 1,
-          pricePerUnit: tx.pricePerUnit ?? null,
-          promoType: tx.promoType ?? null,
-          promoValue: tx.promoValue ?? null,
-          promoBuyX: tx.promoBuyX ?? null,
-          promoGetY: tx.promoGetY ?? null,
-        };
-      });
+      transactions.value = mapTransactions(data.transactions || []);
 
-      notifications.value = (data.notifications || []).map((notif) => ({
-        id: notif.id,
-        title: notif.title,
-        message: notif.message,
-        time: formatNotificationTime(notif.createdAt),
-        type: normalizeNotificationType(notif.type),
-        read: notif.read,
-      }));
+      notifications.value = mapNotifications(data.notifications || []);
       updateHasUnread();
 
       if (process.client && currentUser.value?.notificationsEnabled) {
         void syncPushSubscription();
       }
 
+      const pendingQueue = loadOfflineQueue();
+      if (pendingQueue.length) {
+        mergePendingTransactions(pendingQueue);
+      }
+
       bootstrapped.value = true;
+      persistOfflineCache();
     } finally {
       if (timeout) clearTimeout(timeout);
     }
@@ -1022,29 +1428,205 @@ export const useMoneyManager = () => {
 
   const ensureLoaded = async () => {
     if (process.server) return;
+    setupConnectionListeners();
     if (bootstrapped.value || bootstrapping.value) return;
     bootstrapping.value = true;
     try {
+      if (isOffline()) {
+        const cached = loadOfflineCache();
+        if (cached) {
+          applyOfflineCache(cached);
+          mergePendingTransactions(loadOfflineQueue());
+          bootstrapped.value = true;
+          setFlash(t('offlineMode'), 'info');
+          return;
+        }
+        const sessionUser = loadOfflineSession();
+        if (sessionUser) {
+          applyOfflineSession(sessionUser);
+          bootstrapped.value = true;
+          setFlash(t('offlineNoCache'), 'info');
+          return;
+        }
+        throw new Error('offline-no-cache');
+      }
+
       await fetchBootstrap();
     } catch (error) {
-      console.error('Bootstrap error', error);
-      currentUser.value = null;
-      wallets.value = [];
-      expenseCategories.value = [];
-      incomeCategories.value = [];
-      transactions.value = [];
-      notifications.value = [];
-      hasUnread.value = false;
-      bootstrapped.value = false;
-      setFlash(t('loadFailed'), 'error');
+      const cached = loadOfflineCache();
+      if (cached) {
+        applyOfflineCache(cached);
+        mergePendingTransactions(loadOfflineQueue());
+        bootstrapped.value = true;
+        setFlash(t('offlineMode'), 'info');
+      } else {
+        const sessionUser = isOffline() ? loadOfflineSession() : null;
+        if (sessionUser) {
+          applyOfflineSession(sessionUser);
+          bootstrapped.value = true;
+          setFlash(t('offlineNoCache'), 'info');
+        } else {
+          console.error('Bootstrap error', error);
+          currentUser.value = null;
+          wallets.value = [];
+          expenseCategories.value = [];
+          incomeCategories.value = [];
+          transactions.value = [];
+          notifications.value = [];
+          hasUnread.value = false;
+          bootstrapped.value = false;
+          setFlash(isOffline() ? t('offlineNoCache') : t('loadFailed'), 'error');
+        }
+      }
     } finally {
       bootstrapping.value = false;
+      if (pendingSyncRefresh.value) {
+        pendingSyncRefresh.value = false;
+        await refreshData();
+        return;
+      }
+      if (!isOffline()) {
+        const pendingQueue = loadOfflineQueue();
+        if (pendingQueue.length) {
+          void syncPendingTransactions();
+        }
+      }
     }
   };
 
   const refreshData = async () => {
     bootstrapped.value = false;
     await ensureLoaded();
+  };
+
+  const parseMonthKey = (monthKey: string) => {
+    const [yearText, monthText] = monthKey.split('-');
+    const year = Number(yearText);
+    const month = Number(monthText);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+      return null;
+    }
+    return { year, monthIndex: month - 1 };
+  };
+
+  const getTransactionsForMonth = (monthKey: string) => {
+    const parsed = parseMonthKey(monthKey);
+    if (!parsed) return [] as TransactionItem[];
+    return transactions.value.filter((t) => {
+      const tDate = new Date(t.date);
+      if (Number.isNaN(tDate.getTime())) return false;
+      return tDate.getFullYear() === parsed.year && tDate.getMonth() === parsed.monthIndex;
+    });
+  };
+
+  const sortTransactionsByDate = (items: TransactionItem[]) =>
+    [...items].sort(
+      (a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()
+    );
+
+  const buildWeeklyChart = (items: TransactionItem[], monthKey: string): WeeklyChart => {
+    const parsed = parseMonthKey(monthKey);
+    if (!parsed) return { data: [], maxVal: 1, daysInMonth: 0 };
+    const daysInMonth = new Date(parsed.year, parsed.monthIndex + 1, 0).getDate();
+    const data: WeeklyBucket[] = [];
+    for (let day = 1, index = 0; day <= daysInMonth; day += 7, index += 1) {
+      data.push({
+        week: index + 1,
+        startDay: day,
+        endDay: Math.min(day + 6, daysInMonth),
+        income: 0,
+        expense: 0,
+      });
+    }
+
+    items.forEach((t) => {
+      const tDate = new Date(t.date);
+      if (Number.isNaN(tDate.getTime())) return;
+      const day = tDate.getDate();
+      const index = Math.floor((day - 1) / 7);
+      const bucket = data[index];
+      if (!bucket) return;
+      if (t.type === 'income') {
+        bucket.income += 1;
+      } else {
+        bucket.expense += 1;
+      }
+    });
+
+    const maxVal = Math.max(...data.map((d) => Math.max(d.income, d.expense)), 1);
+    return { data, maxVal, daysInMonth };
+  };
+
+  const applyOfflineAnalyticsOverview = (monthKey: string) => {
+    const items = getTransactionsForMonth(monthKey);
+    const income = items
+      .filter((t) => t.amount > 0)
+      .reduce((acc, curr) => acc + curr.amount, 0);
+    const expense = items
+      .filter((t) => t.amount < 0)
+      .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+
+    analyticsSummary.value = { income, expense, net: income - expense };
+    analyticsWeekly.value = buildWeeklyChart(items, monthKey);
+  };
+
+  const applyOfflineAnalyticsTransactions = (monthKey: string, page = 1) => {
+    const items = sortTransactionsByDate(getTransactionsForMonth(monthKey));
+    analyticsTotal.value = items.length;
+    analyticsPage.value = page;
+    const start = (page - 1) * analyticsPageSize;
+    analyticsTransactions.value = items.slice(start, start + analyticsPageSize);
+  };
+
+  const fetchAnalyticsOverview = async (monthKey: string) => {
+    analyticsLoading.value = true;
+    if (isOffline()) {
+      applyOfflineAnalyticsOverview(monthKey);
+      analyticsLoading.value = false;
+      return;
+    }
+    try {
+      const data = await $fetch<{
+        summary: AnalyticsSummary;
+        weekly: WeeklyChart;
+      }>(`/api/analytics?month=${monthKey}`);
+      analyticsSummary.value = data.summary || { income: 0, expense: 0, net: 0 };
+      analyticsWeekly.value = data.weekly || { data: [], maxVal: 1, daysInMonth: 0 };
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
+    } finally {
+      analyticsLoading.value = false;
+    }
+  };
+
+  const fetchAnalyticsTransactions = async (monthKey: string, page = 1) => {
+    analyticsTableLoading.value = true;
+    if (isOffline()) {
+      applyOfflineAnalyticsTransactions(monthKey, page);
+      analyticsTableLoading.value = false;
+      return;
+    }
+    try {
+      const data = await $fetch<{
+        transactions: TransactionPayload[];
+        total: number;
+      }>(`/api/transactions?month=${monthKey}&page=${page}&limit=${analyticsPageSize}`);
+      analyticsTransactions.value = mapTransactions(data.transactions || []);
+      analyticsTotal.value = Number(data.total || 0);
+      analyticsPage.value = page;
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
+    } finally {
+      analyticsTableLoading.value = false;
+    }
+  };
+
+  const loadAnalytics = async (page = 1) => {
+    const monthKey = monthInputValue.value;
+    await Promise.all([
+      fetchAnalyticsOverview(monthKey),
+      fetchAnalyticsTransactions(monthKey, page),
+    ]);
   };
 
   const clearData = () => {
@@ -1054,8 +1636,23 @@ export const useMoneyManager = () => {
     incomeCategories.value = [];
     transactions.value = [];
     notifications.value = [];
+    notificationsCursor.value = null;
+    notificationsHasMore.value = false;
     hasUnread.value = false;
     bootstrapped.value = false;
+    analyticsSummary.value = { income: 0, expense: 0, net: 0 };
+    analyticsWeekly.value = { data: [], maxVal: 1, daysInMonth: 0 };
+    analyticsTransactions.value = [];
+    analyticsTotal.value = 0;
+    analyticsPage.value = 1;
+    analyticsLoading.value = false;
+    analyticsTableLoading.value = false;
+    clearOfflineCache();
+    clearOfflineQueue();
+    clearOfflineSession();
+    offlineQueueLoaded.value = false;
+    syncingQueue.value = false;
+    pendingSyncRefresh.value = false;
   };
 
   const updatePreferences = async (updates: Partial<UserPreferences>) => {
@@ -1077,9 +1674,11 @@ export const useMoneyManager = () => {
       if (updates.notificationsEnabled === true) {
         updateHasUnread();
       }
+      persistOfflineCache();
     } catch (error) {
       currentUser.value = previous;
       setFlash(resolveErrorMessage(error, 'Gagal memperbarui preferensi.'), 'error');
+      persistOfflineCache();
     }
   };
 
@@ -1145,6 +1744,7 @@ export const useMoneyManager = () => {
       });
       currentUser.value = response.user;
       setFlash('Profil berhasil diperbarui.', 'success');
+      persistOfflineCache();
       closeProfileModal();
     } catch (error) {
       setFlash(resolveErrorMessage(error, 'Gagal memperbarui profil.'), 'error');
@@ -1405,23 +2005,48 @@ export const useMoneyManager = () => {
     const quantity = Math.max(1, Math.floor(parseFloat(String(formData.value.quantity)) || 1));
     const pricePerUnit = parseFloat(String(formData.value.pricePerItem)) || 0;
 
+    const transactionDate = formData.value.date || getTodayString();
+
+    const payload = {
+      categoryId: formData.value.category,
+      walletId,
+      amount: formData.value.totalAmount,
+      date: transactionDate,
+      productName: title,
+      note: formData.value.notes || null,
+      quantity: formData.value.type === 'expense' ? quantity : 1,
+      pricePerUnit: formData.value.type === 'expense' && pricePerUnit > 0 ? pricePerUnit : null,
+      promoType,
+      promoValue,
+      promoBuyX,
+      promoGetY,
+    };
+
+    const saveOffline = () => {
+      const localId = `offline-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      const offlineItem: OfflineTransactionPayload = {
+        id: localId,
+        createdAt: new Date().toISOString(),
+        payload,
+      };
+      const queue = loadOfflineQueue();
+      saveOfflineQueue([...queue, offlineItem]);
+      mergePendingTransactions([offlineItem]);
+      persistOfflineCache();
+      showAddModal.value = false;
+      resetTransactionForm();
+      setFlash(t('offlineSaved'), 'info');
+    };
+
+    if (isOffline()) {
+      saveOffline();
+      return;
+    }
+
     try {
       await $fetch('/api/transactions', {
         method: 'POST',
-        body: {
-          categoryId: formData.value.category,
-          walletId,
-          amount: formData.value.totalAmount,
-          date: formData.value.date,
-          productName: title,
-          note: formData.value.notes || null,
-          quantity: formData.value.type === 'expense' ? quantity : 1,
-          pricePerUnit: formData.value.type === 'expense' && pricePerUnit > 0 ? pricePerUnit : null,
-          promoType,
-          promoValue,
-          promoBuyX,
-          promoGetY,
-        },
+        body: payload,
       });
 
       showAddModal.value = false;
@@ -1429,19 +2054,33 @@ export const useMoneyManager = () => {
       await refreshData();
       setFlash(t('transactionSaved'), 'success');
     } catch (error) {
+      if (isOffline()) {
+        saveOffline();
+        return;
+      }
       setFlash(resolveErrorMessage(error, t('transactionSaveFailed')), 'error');
     }
   };
 
-  const getWalletIncome = (walletId: string) =>
-    transactions.value
+  const getWalletIncome = (walletId: string) => {
+    const wallet = wallets.value.find((item) => item.id === walletId);
+    if (wallet && typeof wallet.incomeTotal === 'number') {
+      return wallet.incomeTotal;
+    }
+    return transactions.value
       .filter((t) => t.walletId === walletId && t.amount > 0)
       .reduce((acc, curr) => acc + curr.amount, 0);
+  };
 
-  const getWalletExpense = (walletId: string) =>
-    transactions.value
+  const getWalletExpense = (walletId: string) => {
+    const wallet = wallets.value.find((item) => item.id === walletId);
+    if (wallet && typeof wallet.expenseTotal === 'number') {
+      return wallet.expenseTotal;
+    }
+    return transactions.value
       .filter((t) => t.walletId === walletId && t.amount < 0)
       .reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
+  };
 
   const currentMonthTransactions = computed(() => {
     const now = new Date();
@@ -1479,7 +2118,7 @@ export const useMoneyManager = () => {
     const month = today.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    const data = [];
+    const data: WeeklyBucket[] = [];
     for (let start = 1, index = 0; start <= daysInMonth; start += 7, index += 1) {
       const end = Math.min(start + 6, daysInMonth);
       data.push({
@@ -1576,13 +2215,16 @@ export const useMoneyManager = () => {
     });
 
     return Object.keys(catMap)
-      .map((cat) => ({
-        name: cat,
-        amount: catMap[cat],
-        percent: totalExp === 0 ? '0%' : `${Math.round((catMap[cat] / totalExp) * 100)}%`,
-        color: colorMap[cat] || 'bg-blue-500',
-        icon: iconMap.get(cat) || 'fa-tag',
-      }))
+      .map((cat) => {
+        const amount = catMap[cat] || 0;
+        return {
+          name: cat,
+          amount,
+          percent: totalExp === 0 ? '0%' : `${Math.round((amount / totalExp) * 100)}%`,
+          color: colorMap[cat] || 'bg-blue-500',
+          icon: iconMap.get(cat) || 'fa-tag',
+        };
+      })
       .sort((a, b) => b.amount - a.amount);
   });
 
@@ -1607,13 +2249,16 @@ export const useMoneyManager = () => {
     });
 
     return Object.keys(catMap)
-      .map((cat) => ({
-        name: cat,
-        amount: catMap[cat],
-        percent: totalInc === 0 ? '0%' : `${Math.round((catMap[cat] / totalInc) * 100)}%`,
-        color: colorMap[cat] || 'bg-lime-400',
-        icon: iconMap.get(cat) || 'fa-tag',
-      }))
+      .map((cat) => {
+        const amount = catMap[cat] || 0;
+        return {
+          name: cat,
+          amount,
+          percent: totalInc === 0 ? '0%' : `${Math.round((amount / totalInc) * 100)}%`,
+          color: colorMap[cat] || 'bg-lime-400',
+          icon: iconMap.get(cat) || 'fa-tag',
+        };
+      })
       .sort((a, b) => b.amount - a.amount);
   });
 
@@ -1649,6 +2294,7 @@ export const useMoneyManager = () => {
     const newDate = new Date(statsDate.value);
     newDate.setMonth(newDate.getMonth() + direction);
     statsDate.value = newDate.getTime();
+    void loadAnalytics(1);
   };
 
   const handleDatePickerChange = (event: Event) => {
@@ -1656,19 +2302,53 @@ export const useMoneyManager = () => {
     if (!target.value) return;
     const [year, month] = target.value.split('-');
     statsDate.value = new Date(Number(year), Number(month) - 1, 1).getTime();
+    void loadAnalytics(1);
   };
 
-  const handleDownloadExcel = () => {
-    const filtered = filteredTransactions.value;
-    if (filtered.length === 0) {
-      alert('Tidak ada data.');
+  const fetchAllTransactionsForMonth = async (monthKey: string) => {
+    if (isOffline()) {
+      return sortTransactionsByDate(getTransactionsForMonth(monthKey));
+    }
+    const all: TransactionItem[] = [];
+    const pageSize = 50;
+    let page = 1;
+    let total = 0;
+
+    while (true) {
+      const data = await $fetch<{
+        transactions: TransactionPayload[];
+        total: number;
+      }>(`/api/transactions?month=${monthKey}&page=${page}&limit=${pageSize}`);
+      const items = mapTransactions(data.transactions || []);
+      if (page === 1) {
+        total = Number(data.total || 0);
+      }
+      all.push(...items);
+      if (all.length >= total || items.length === 0) break;
+      page += 1;
+    }
+
+    return all;
+  };
+
+  const handleDownloadExcel = async () => {
+    let items: TransactionItem[] = [];
+    try {
+      items = await fetchAllTransactionsForMonth(monthInputValue.value);
+    } catch (error) {
+      setFlash(resolveErrorMessage(error, t('loadFailed')), 'error');
+      return;
+    }
+
+    if (items.length === 0) {
+      setFlash(t('noDataToExport'), 'info');
       return;
     }
 
     const headers = ['Tanggal', 'Judul', 'Kategori', 'Jumlah', 'Tipe', 'Dompet'];
     const csvContent = [
       headers.join(','),
-      ...filtered.map((t) =>
+      ...items.map((t) =>
         [
           t.date,
           `"${t.title}"`,
@@ -1715,6 +2395,7 @@ export const useMoneyManager = () => {
     languageOptions,
     t,
     notifications,
+    notificationsHasMore,
     notificationStyles,
     bootstrapping,
     flashMessage,
@@ -1722,6 +2403,14 @@ export const useMoneyManager = () => {
     expenseCategories,
     incomeCategories,
     transactions,
+    analyticsSummary,
+    analyticsWeekly,
+    analyticsTransactions,
+    analyticsTotal,
+    analyticsPage,
+    analyticsPageSize,
+    analyticsLoading,
+    analyticsTableLoading,
     showAddModal,
     showWalletModal,
     showCategoryModal,
@@ -1746,7 +2435,10 @@ export const useMoneyManager = () => {
     toggleNotifications,
     markAllNotificationsRead,
     markNotificationRead,
+    refreshNotifications,
+    loadMoreNotifications,
     ensureLoaded,
+    cacheOfflineSession,
     refreshData,
     setFlash,
     clearFlash,
@@ -1766,6 +2458,8 @@ export const useMoneyManager = () => {
     requestDeleteWallet,
     confirmDeleteWallet,
     cancelDeleteWallet,
+    loadAnalytics,
+    fetchAnalyticsTransactions,
     openCategoryModal,
     handleOpenEditCategory,
     handleSaveCategory,
