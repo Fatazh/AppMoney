@@ -11,6 +11,7 @@ export default defineEventHandler(async (event) => {
   const name = String(body?.name || '').trim();
   const type = String(body?.type || '').toUpperCase();
   const icon = body?.icon ? String(body.icon).trim() : 'fa-tag';
+  const isSalary = typeof body?.isSalary === 'boolean' ? body.isSalary : false;
 
   if (!name) {
     throw createError({ statusCode: 400, statusMessage: 'Nama kategori wajib diisi.' });
@@ -35,8 +36,8 @@ export default defineEventHandler(async (event) => {
 
   try {
     const category = await prisma.category.create({
-      data: { name, type, icon, userId: user.id },
-      select: { id: true, name: true, type: true, icon: true },
+      data: { name, type, icon, isSalary: type === 'INCOME' ? isSalary : false, userId: user.id },
+      select: { id: true, name: true, type: true, icon: true, isSalary: true },
     });
 
     return { category };

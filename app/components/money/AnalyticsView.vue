@@ -77,21 +77,22 @@ const goNextPage = () => {
   void fetchAnalyticsTransactions(monthInputValue.value, analyticsPage.value + 1);
 };
 
-const selectedTransaction = ref<{
-  id: string;
-  title: string;
-  category: string;
-  type: 'expense' | 'income';
-  date: string;
-  amount: number;
-  note: string | null;
-  pricePerUnit: number | null;
-  promoType: string | null;
-  promoValue: number | null;
-  promoBuyX: number | null;
-  promoGetY: number | null;
-  wallet: string;
-} | null>(null);
+  const selectedTransaction = ref<{
+    id: string;
+    title: string;
+    category: string;
+    type: 'expense' | 'income';
+    date: string;
+    amount: number;
+    note: string | null;
+    pricePerUnit: number | null;
+    promoType: string | null;
+    promoValue: number | null;
+    promoBuyX: number | null;
+    promoGetY: number | null;
+    incomePeriod?: string | null;
+    wallet: string;
+  } | null>(null);
 
 const openTransactionDetail = (transaction: typeof selectedTransaction.value) => {
   if (!transaction) return;
@@ -490,6 +491,10 @@ watch(
               <div class="flex justify-between items-center">
                 <span class="text-xs text-gray-400">{{ t('date') }}</span>
                 <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.date }}</span>
+              </div>
+              <div v-if="selectedTransaction.incomePeriod" class="flex justify-between items-center">
+                <span class="text-xs text-gray-400">{{ t('incomePeriodLabel') }}</span>
+                <span class="text-sm font-semibold text-slate-700">{{ selectedTransaction.incomePeriod }}</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-xs text-gray-400">{{ t('incomeName') }}</span>

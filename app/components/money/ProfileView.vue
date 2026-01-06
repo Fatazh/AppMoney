@@ -8,12 +8,15 @@ const {
   darkModeEnabled,
   preferredCurrency,
   preferredLanguage,
+  reportingStartDay,
   currencyOptions,
   languageOptions,
+  reportingStartDayOptions,
   toggleNotificationsPreference,
   toggleDarkModePreference,
   setCurrencyPreference,
   setLanguagePreference,
+  setReportingStartDay,
   t,
   handleLogout,
   openProfileModal,
@@ -162,6 +165,27 @@ const {
               <i class="fas fa-chevron-down text-gray-400 text-xs absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
             </div>
           </div>
+          <div class="flex items-center justify-between p-3 rounded-xl transition-colors hover:bg-gray-50">
+            <div class="flex items-center gap-3">
+              <div class="p-2 rounded-lg bg-gray-100 text-slate-700">
+                <i class="fas fa-calendar-day"></i>
+              </div>
+              <span class="font-medium text-slate-700">{{ t('reportingPeriod') }}</span>
+            </div>
+            <div class="relative">
+              <select
+                class="appearance-none bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-slate-600 px-2.5 py-1.5 pr-7"
+                :value="reportingStartDay"
+                @change="setReportingStartDay(Number(($event.target as HTMLSelectElement).value))"
+              >
+                <option v-for="day in reportingStartDayOptions" :key="day" :value="day">
+                  {{ t('reportingStartDayLabel') }} {{ day }}
+                </option>
+              </select>
+              <i class="fas fa-chevron-down text-gray-400 text-xs absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            </div>
+          </div>
+          <p class="px-3 pb-3 text-[10px] text-gray-400">{{ t('reportingStartDayHint') }}</p>
         </div>
       </div>
 

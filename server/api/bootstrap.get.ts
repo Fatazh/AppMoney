@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const [categories, wallets, transactionsAll, transactionsMonth, notifications] = await prisma.$transaction([
     prisma.category.findMany({
       where: { userId: user.id },
-      select: { id: true, name: true, type: true, icon: true },
+      select: { id: true, name: true, type: true, icon: true, isSalary: true },
       orderBy: { name: 'asc' },
     }),
     prisma.wallet.findMany({
@@ -39,7 +39,9 @@ export default defineEventHandler(async (event) => {
         date: true,
         createdAt: true,
         note: true,
+        incomePeriod: true,
         productName: true,
+        merchantName: true,
         quantity: true,
         pricePerUnit: true,
         promoType: true,
@@ -99,7 +101,9 @@ export default defineEventHandler(async (event) => {
       date: tx.date.toISOString().split('T')[0],
       createdAt: tx.createdAt.toISOString(),
       productName: tx.productName,
+      merchantName: tx.merchantName ?? null,
       note: tx.note,
+      incomePeriod: tx.incomePeriod,
       quantity: tx.quantity,
       pricePerUnit: tx.pricePerUnit ? toNumber(tx.pricePerUnit) : null,
       promoType: tx.promoType,

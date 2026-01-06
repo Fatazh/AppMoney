@@ -35,6 +35,14 @@ export default defineEventHandler(async (event) => {
     updates.language = language;
   }
 
+  if (body?.reportingStartDay !== undefined) {
+    const day = Number(body.reportingStartDay);
+    if (!Number.isFinite(day) || day < 1 || day > 31) {
+      throw createError({ statusCode: 400, statusMessage: 'Tanggal periode tidak valid.' });
+    }
+    updates.reportingStartDay = Math.floor(day);
+  }
+
   if (Object.keys(updates).length === 0) {
     throw createError({ statusCode: 400, statusMessage: 'Tidak ada preferensi yang diperbarui.' });
   }
@@ -51,6 +59,7 @@ export default defineEventHandler(async (event) => {
       darkMode: true,
       currency: true,
       language: true,
+      reportingStartDay: true,
     },
   });
 

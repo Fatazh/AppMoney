@@ -8,36 +8,81 @@ const {
   incomeCategories,
   wallets,
   formatRupiah,
-  isOnline,
-  ocrLoading,
-  scanReceipt,
   handleSaveTransaction,
   resetTransactionForm,
-  setFlash,
   t,
 } = useMoneyManager();
 
 resetTransactionForm();
 
 const showCategoryPicker = ref(false);
-const receiptInput = ref<HTMLInputElement | null>(null);
+const buildManualItemId = () =>
+  `manual-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
-const ocrDisabled = computed(() => !isOnline.value || ocrLoading.value);
+const resolveManualItemTotal = (item: {
+  qty: number | string;
+  unitPrice: number | string;
+  hasPromo?: boolean;
+  promoType?: 'percent' | 'nominal' | 'buyXgetY';
+  promoValue?: number | string;
+  buyX?: number | string;
+  getY?: number | string;
+}) => {
+  const qty = Math.max(0, Math.floor(Number(item.qty) || 0));
+  const unitPrice = Math.max(0, Number(item.unitPrice) || 0);
+  const baseTotal = qty * unitPrice;
+  let finalTotal = baseTotal;
 
-const triggerReceiptPicker = () => {
-  if (!isOnline.value) {
-    setFlash(t('scanReceiptDisabled'), 'info');
-    return;
+  if (item.hasPromo) {
+    const promoType = item.promoType || 'percent';
+    const promoVal = Math.max(0, Number(item.promoValue) || 0);
+    if (promoType === 'percent') {
+      finalTotal = baseTotal - baseTotal * (promoVal / 100);
+    } else if (promoType === 'nominal') {
+      finalTotal = baseTotal - promoVal;
+    } else if (promoType === 'buyXgetY') {
+      const buyX = Math.max(0, Math.floor(Number(item.buyX) || 0));
+      const getY = Math.max(0, Math.floor(Number(item.getY) || 0));
+      const group = buyX + getY;
+      if (buyX > 0 && getY > 0 && group > 0) {
+        const freeItems = Math.floor(qty / group) * getY;
+        const paidQty = Math.max(0, qty - freeItems);
+        finalTotal = paidQty * unitPrice;
+      }
+    }
   }
-  receiptInput.value?.click();
+
+  return Math.max(0, Math.round(finalTotal));
 };
 
-const handleReceiptChange = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const file = target.files?.[0];
-  if (!file) return;
-  void scanReceipt(file);
-  target.value = '';
+const manualItems = computed(() => formData.value.manualItems || []);
+const manualItemsTotal = computed(() =>
+  manualItems.value.reduce((sum, item) => sum + resolveManualItemTotal(item), 0)
+);
+
+const addManualItem = () => {
+  if (!formData.value.manualItems) {
+    formData.value.manualItems = [];
+  }
+  formData.value.manualItems.push({
+    id: buildManualItemId(),
+    name: '',
+    qty: 1,
+    unitPrice: 0,
+    hasPromo: false,
+    promoType: 'percent',
+    promoValue: '',
+    buyX: 1,
+    getY: 1,
+  });
+};
+
+const removeManualItem = (id: string) => {
+  if (!formData.value.manualItems) return;
+  formData.value.manualItems = formData.value.manualItems.filter((item) => item.id !== id);
+  if (formData.value.multiItemMode && formData.value.manualItems.length === 0) {
+    addManualItem();
+  }
 };
 
 const categoryOptions = computed(() =>
@@ -57,6 +102,30 @@ const selectedCategoryLabel = computed(() => selectedCategory.value?.name || t('
 const selectCategory = (categoryId: string) => {
   formData.value.category = categoryId;
   showCategoryPicker.value = false;
+};
+
+const showIncomePeriod = computed(() => {
+  if (formData.value.type !== 'income') return false;
+  return Boolean(selectedCategory.value?.isSalary);
+});
+
+const resolveIncomePeriod = () => {
+  const raw = formData.value.date || '';
+  if (raw.length >= 7) return raw.slice(0, 7);
+  return new Date().toISOString().slice(0, 7);
+};
+
+const syncIncomePeriod = () => {
+  if (formData.value.type !== 'income') return;
+  if (showIncomePeriod.value) {
+    if (!formData.value.incomePeriod) {
+      formData.value.incomePeriod = resolveIncomePeriod();
+    }
+    return;
+  }
+  if (formData.value.incomePeriod) {
+    formData.value.incomePeriod = '';
+  }
 };
 
 const selectedWallet = computed(() =>
@@ -79,15 +148,36 @@ watch(
     } else {
       formData.value.category = incomeCategories.value[0]?.id || '';
       formData.value.destWallet = wallets.value[0]?.id || '';
+      formData.value.multiItemMode = false;
     }
     showCategoryPicker.value = false;
+    syncIncomePeriod();
   },
   { immediate: true }
 );
 
 watch(
+  () => formData.value.category,
+  () => {
+    if (formData.value.type !== 'income') return;
+    syncIncomePeriod();
+  }
+);
+
+watch(
+  () => formData.value.multiItemMode,
+  (enabled) => {
+    if (!enabled) return;
+    if (formData.value.manualItems?.length) return;
+    addManualItem();
+  }
+);
+
+watch(
   () => [
     formData.value.type,
+    formData.value.multiItemMode,
+    manualItemsTotal.value,
     formData.value.quantity,
     formData.value.pricePerItem,
     formData.value.hasPromo,
@@ -99,6 +189,10 @@ watch(
   ],
   () => {
     if (formData.value.type === 'expense') {
+      if (formData.value.multiItemMode) {
+        formData.value.totalAmount = Math.max(0, manualItemsTotal.value);
+        return;
+      }
       const qty = parseFloat(String(formData.value.quantity)) || 0;
       const price = parseFloat(String(formData.value.pricePerItem)) || 0;
       let baseTotal = qty * price;
@@ -177,33 +271,21 @@ watch(
             </div>
           </div>
           <div>
-            <div class="flex items-center justify-between mb-1 ml-1">
-              <label class="block text-xs text-gray-400">{{ t('productName') }}</label>
-              <button
-                type="button"
-                class="text-[10px] font-semibold flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 text-slate-600 hover:border-lime-400 hover:text-lime-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                :disabled="ocrDisabled"
-                @click="triggerReceiptPicker"
-              >
-                <i class="fas fa-receipt"></i>
-                {{ ocrLoading ? t('scanReceiptLoading') : t('scanReceipt') }}
-              </button>
-            </div>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('productName') }}</label>
             <input
               v-model="formData.productName"
               type="text"
               :placeholder="t('productExample')"
               class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
             />
-            <p class="text-[10px] text-gray-400 mt-1 ml-1">
-              {{ isOnline ? t('scanReceiptHint') : t('scanReceiptDisabled') }}
-            </p>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('merchantLabel') }}</label>
             <input
-              ref="receiptInput"
-              type="file"
-              accept="image/*"
-              class="hidden"
-              @change="handleReceiptChange"
+              v-model="formData.merchantName"
+              type="text"
+              :placeholder="t('merchantPlaceholder')"
+              class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
             />
           </div>
           <div>
@@ -243,7 +325,146 @@ watch(
               </div>
             </div>
           </div>
-          <div class="flex gap-3">
+          <div class="bg-white border border-dashed border-gray-200 rounded-2xl p-4 space-y-2">
+            <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input
+                v-model="formData.multiItemMode"
+                type="checkbox"
+                class="w-4 h-4 text-lime-500 border-gray-300 rounded focus:ring-lime-400"
+              />
+              {{ t('multiItemLabel') }}
+            </label>
+            <p class="text-[10px] text-gray-400 ml-6">{{ t('multiItemHint') }}</p>
+          </div>
+          <div v-if="formData.multiItemMode" class="space-y-3">
+            <div class="flex items-center justify-between">
+              <p class="text-xs text-gray-400">{{ t('receiptItemsNote') }}</p>
+              <button
+                type="button"
+                class="text-[10px] font-semibold flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 text-slate-600 hover:border-lime-400 hover:text-lime-600 transition-colors"
+                @click="addManualItem"
+              >
+                <i class="fas fa-plus"></i>
+                {{ t('receiptAddItem') }}
+              </button>
+            </div>
+            <div
+              v-for="item in manualItems"
+              :key="item.id"
+              class="bg-gray-50 border border-gray-100 rounded-2xl p-3 space-y-3"
+            >
+              <div class="flex items-start gap-2">
+                <input
+                  v-model="item.name"
+                  type="text"
+                  :placeholder="t('productName')"
+                  class="flex-1 bg-white border border-gray-100 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
+                />
+                <button
+                  type="button"
+                  class="p-3 bg-white border border-gray-100 rounded-xl text-gray-400 hover:text-red-500 hover:border-red-200 transition-colors"
+                  @click="removeManualItem(item.id)"
+                >
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+              <div class="flex gap-3">
+                <div class="flex-1">
+                  <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('quantity') }}</label>
+                  <input
+                    v-model="item.qty"
+                    type="number"
+                    min="1"
+                    class="w-full bg-white border border-gray-100 rounded-xl py-3 px-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
+                  />
+                </div>
+                <div class="flex-[2]">
+                  <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('price') }}</label>
+                  <input
+                    v-model="item.unitPrice"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    class="w-full bg-white border border-gray-100 rounded-xl py-3 px-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
+                  />
+                </div>
+              </div>
+              <div class="bg-white border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                <label class="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                  <input
+                    v-model="item.hasPromo"
+                    type="checkbox"
+                    class="w-4 h-4 text-lime-500 border-gray-300 rounded focus:ring-lime-400"
+                  />
+                  {{ t('usePromo') }}
+                </label>
+                <div v-if="item.hasPromo" class="space-y-2">
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('promoTypeLabel') }}</label>
+                    <div class="relative">
+                      <select
+                        v-model="item.promoType"
+                        class="w-full bg-white border border-gray-100 rounded-xl py-2 pl-3 pr-8 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400 appearance-none"
+                      >
+                        <option value="percent">{{ t('promoPercent') }}</option>
+                        <option value="nominal">{{ t('promoNominal') }}</option>
+                        <option value="buyXgetY">{{ t('promoBuyXGetY') }}</option>
+                      </select>
+                      <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                    </div>
+                  </div>
+                  <div v-if="item.promoType === 'percent'">
+                    <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('promoPercent') }}</label>
+                    <input
+                      v-model="item.promoValue"
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="0"
+                      class="w-full bg-white border border-gray-100 rounded-xl p-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
+                    />
+                  </div>
+                  <div v-else-if="item.promoType === 'nominal'">
+                    <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('discountNominalLabel') }}</label>
+                    <input
+                      v-model="item.promoValue"
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      class="w-full bg-white border border-gray-100 rounded-xl p-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
+                    />
+                  </div>
+                  <div v-else class="flex gap-2">
+                    <div class="flex-1">
+                      <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('buyXLabel') }}</label>
+                      <input
+                        v-model="item.buyX"
+                        type="number"
+                        min="1"
+                        placeholder="1"
+                        class="w-full bg-white border border-gray-100 rounded-xl p-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
+                      />
+                    </div>
+                    <div class="flex-1">
+                      <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('getYLabel') }}</label>
+                      <input
+                        v-model="item.getY"
+                        type="number"
+                        min="1"
+                        placeholder="1"
+                        class="w-full bg-white border border-gray-100 rounded-xl p-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between text-xs text-gray-400">
+                <span>{{ t('amount') }}</span>
+                <span class="font-semibold text-slate-700">{{ formatRupiah(resolveManualItemTotal(item)) }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="!formData.multiItemMode" class="flex gap-3">
             <div class="flex-1">
               <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('quantity') }}</label>
               <input
@@ -263,7 +484,10 @@ watch(
               />
             </div>
           </div>
-          <div class="bg-white border border-dashed border-gray-200 rounded-2xl p-4 space-y-3">
+          <div
+            v-if="!formData.multiItemMode"
+            class="bg-white border border-dashed border-gray-200 rounded-2xl p-4 space-y-3"
+          >
             <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
               <input
                 v-model="formData.hasPromo"
@@ -416,6 +640,17 @@ watch(
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+          <div>
+            <div v-if="showIncomePeriod">
+              <label class="block text-xs text-gray-400 mb-1 ml-1">{{ t('incomePeriodLabel') }}</label>
+              <input
+                v-model="formData.incomePeriod"
+                type="month"
+                class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
+              />
+              <p class="text-[10px] text-gray-400 mt-1 ml-1">{{ t('incomePeriodHint') }}</p>
             </div>
           </div>
           <div>

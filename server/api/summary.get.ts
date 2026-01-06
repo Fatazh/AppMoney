@@ -1,11 +1,9 @@
 import { getQuery } from 'h3';
 import { prisma } from '../utils/prisma';
 import { requireUser } from '../utils/auth';
+import { getReportingRangeForMonth, normalizeStartDay } from '../utils/reporting';
 
-const startOfMonth = (date = new Date()) => new Date(date.getFullYear(), date.getMonth(), 1);
-const endOfMonth = (date = new Date()) => new Date(date.getFullYear(), date.getMonth() + 1, 1);
-
-const parseMonth = (value?: string) => {
+const parseMonthParam = (value?: string) => {
   if (!value) return null;
   const [yearText, monthText] = value.split('-');
   const year = Number(yearText);
@@ -13,7 +11,7 @@ const parseMonth = (value?: string) => {
   if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
     return null;
   }
-  return new Date(year, month - 1, 1);
+  return { year, monthIndex: month - 1 };
 };
 
 const toCents = (value: unknown) => {
@@ -26,12 +24,20 @@ export default defineEventHandler(async (event) => {
   const user = await requireUser(event);
   const query = getQuery(event);
   const monthParam = typeof query.month === 'string' ? query.month : undefined;
-  const monthStart = parseMonth(monthParam) || startOfMonth(new Date());
-  const monthEnd = endOfMonth(monthStart);
+  const range = parseMonthParam(monthParam);
+  const startDay = normalizeStartDay(user.reportingStartDay);
+  const fallback = getReportingRangeForMonth(
+    new Date().getFullYear(),
+    new Date().getMonth(),
+    startDay
+  );
+  const period = range
+    ? getReportingRangeForMonth(range.year, range.monthIndex, startDay)
+    : fallback;
 
   // total income/expense bulan ini (berdasar tanggal transaksi)
   const tx = await prisma.transaction.findMany({
-    where: { userId: user.id, date: { gte: monthStart, lt: monthEnd } },
+    where: { userId: user.id, date: { gte: period.start, lt: period.end } },
     select: {
       amount: true,
       category: { select: { type: true, name: true, id: true } },
@@ -55,7 +61,7 @@ export default defineEventHandler(async (event) => {
   }
 
   return {
-    monthFrom: monthStart.toString(),
+    monthFrom: period.start.toString(),
     incomeCents: income,
     expenseCents: expense,
     netCents: income - expense,

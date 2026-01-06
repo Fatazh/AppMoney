@@ -52,7 +52,10 @@ const iconOptions = [
               type="button"
               class="flex-1 py-2 rounded-xl text-xs font-bold border transition-colors"
               :class="categoryForm.type === 'expense' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'"
-              @click="categoryForm.type = 'expense'"
+              @click="
+                categoryForm.type = 'expense';
+                categoryForm.isSalary = false;
+              "
             >
               {{ t('expenseBadge') }}
             </button>
@@ -65,6 +68,17 @@ const iconOptions = [
               {{ t('incomeBadge') }}
             </button>
           </div>
+        </div>
+        <div v-if="categoryForm.type === 'income'">
+          <label class="flex items-center gap-2 text-xs font-semibold text-slate-700">
+            <input
+              v-model="categoryForm.isSalary"
+              type="checkbox"
+              class="w-4 h-4 text-lime-500 border-gray-300 rounded focus:ring-lime-400"
+            />
+            {{ t('salaryCategoryLabel') }}
+          </label>
+          <p class="text-[10px] text-gray-400 mt-1 ml-6">{{ t('salaryCategoryHint') }}</p>
         </div>
         <div>
           <label class="block text-xs text-gray-400 mb-2 ml-1">{{ t('icon') }}</label>
