@@ -93,6 +93,7 @@ export const getUserFromEvent = async (event: any) => {
       darkMode: true,
       currency: true,
       language: true,
+      reportingStartDay: true,
     },
   });
 };

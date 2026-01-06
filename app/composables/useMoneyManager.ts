@@ -18,6 +18,7 @@ interface UserInfo {
   darkMode?: boolean | null;
   currency?: CurrencyCode | null;
   language?: LanguageCode | null;
+  reportingStartDay?: number | null;
 }
 
 interface NotificationItem {
@@ -49,6 +50,7 @@ interface WalletItem {
 interface TransactionItem {
   id: string;
   title: string;
+  merchantName?: string | null;
   category: string;
   categoryId: string;
   type: TransactionType;
@@ -65,6 +67,7 @@ interface TransactionItem {
   promoValue: number | null;
   promoBuyX: number | null;
   promoGetY: number | null;
+  incomePeriod?: string | null;
   pending?: boolean;
 }
 
@@ -73,6 +76,7 @@ interface CategoryItem {
   name: string;
   type: TransactionType;
   icon: string;
+  isSalary?: boolean;
 }
 
 interface CategoryStat {
@@ -93,6 +97,7 @@ interface CategoryFormState {
   name: string;
   type: TransactionType;
   icon: string;
+  isSalary: boolean;
 }
 
 interface ProfileFormState {
@@ -111,6 +116,7 @@ interface UserPreferences {
   darkMode: boolean;
   currency: CurrencyCode;
   language: LanguageCode;
+  reportingStartDay: number;
 }
 
 interface ExchangeRatesState {
@@ -155,6 +161,7 @@ interface BootstrapPayload {
     name: string;
     type: DbCategoryType;
     icon?: string | null;
+    isSalary?: boolean | null;
   }>;
   transactions: Array<{
     id: string;
@@ -162,7 +169,9 @@ interface BootstrapPayload {
     date: string;
     createdAt: string;
     productName?: string | null;
+    merchantName?: string | null;
     note?: string | null;
+    incomePeriod?: string | null;
     quantity?: number | null;
     pricePerUnit?: number | null;
     promoType?: string | null;
@@ -202,7 +211,9 @@ interface OfflineTransactionPayload {
     amount: number;
     date: string;
     productName: string;
+    merchantName: string | null;
     note: string | null;
+    incomePeriod: string | null;
     quantity: number;
     pricePerUnit: number | null;
     promoType: string | null;
@@ -227,6 +238,18 @@ interface OfflineSession {
   version: number;
   user: UserInfo;
   updatedAt: string;
+}
+
+interface ManualItem {
+  id: string;
+  name: string;
+  qty: number | string;
+  unitPrice: number | string;
+  hasPromo: boolean;
+  promoType: 'percent' | 'nominal' | 'buyXgetY';
+  promoValue: number | string;
+  buyX: number | string;
+  getY: number | string;
 }
 
 const walletTypeMapToUi: Record<DbWalletType, WalletType> = {
@@ -268,6 +291,10 @@ const resolveTransactionIcon = (category: string, type: TransactionType) => {
 };
 
 const getTodayString = () => new Date().toISOString().slice(0, 10);
+const getMonthKey = (value?: Date) => {
+  const date = value || new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
 
 const offlineCacheKey = 'mm-offline-cache-v1';
 const offlineQueueKey = 'mm-offline-queue-v1';
@@ -320,6 +347,13 @@ export const useMoneyManager = () => {
     currentUser.value?.language === 'en' ? 'en' : 'id'
   );
   const preferredLocale = computed(() => (preferredLanguage.value === 'en' ? 'en-US' : 'id-ID'));
+  const reportingStartDay = computed(() => {
+    const value = Number(currentUser.value?.reportingStartDay);
+    if (!Number.isFinite(value)) return 1;
+    if (value < 1) return 1;
+    if (value > 31) return 31;
+    return Math.floor(value);
+  });
   const exchangeRates = useState<ExchangeRatesState>('mm-exchangeRates', () => ({
     base: 'IDR',
     rates: { IDR: 1, USD: 1 / 15500 },
@@ -442,6 +476,8 @@ export const useMoneyManager = () => {
       editCategory: 'Edit Kategori',
       categoryNameLabel: 'Nama Kategori',
       categoryExample: 'Contoh: Hiburan, Bonus',
+      salaryCategoryLabel: 'Tandai sebagai gaji',
+      salaryCategoryHint: 'Aktifkan untuk pemasukan gaji agar muncul Periode Gaji.',
       saveCategory: 'Simpan Kategori',
       deleteCategory: 'Hapus Kategori',
       deleteWarning: 'Tindakan ini tidak bisa dibatalkan.',
@@ -475,6 +511,8 @@ export const useMoneyManager = () => {
       walletIn: 'Masuk ke Dompet',
       amount: 'Jumlah',
       note: 'Keterangan',
+      incomePeriodLabel: 'Periode Gaji',
+      incomePeriodHint: 'Contoh: 2025-04 untuk gaji periode April.',
       nominal: 'Nominal',
       unitPrice: 'Satuan',
       promo: 'Promo',
@@ -525,6 +563,9 @@ export const useMoneyManager = () => {
       avatarHint: 'PNG/JPG, maks 512KB.',
       changePassword: 'Ganti Password',
       dataSecurity: 'Data & Keamanan',
+      reportingPeriod: 'Periode Laporan',
+      reportingStartDayLabel: 'Mulai tiap tanggal',
+      reportingStartDayHint: 'Jika tanggal tidak ada, gunakan hari terakhir bulan.',
       exportData: 'Ekspor Data (CSV)',
       privacyPolicy: 'Kebijakan Privasi',
       helpCenter: 'Pusat Bantuan',
@@ -536,16 +577,14 @@ export const useMoneyManager = () => {
       offlineSaved: 'Transaksi disimpan offline dan akan tersinkron saat online.',
       offlineNoCache: 'Anda offline dan belum ada data tersimpan.',
       offlineSyncFailed: 'Gagal sinkron transaksi offline. Akan dicoba lagi.',
-      scanReceipt: 'Scan Struk',
-      scanReceiptHint: 'Unggah foto struk (PNG/JPG).',
-      scanReceiptDisabled: 'OCR hanya bisa saat online.',
-      scanReceiptLoading: 'Memindai...',
-      scanReceiptUnsupported: 'Struk harus berupa gambar.',
-      scanReceiptTooLarge: 'Ukuran struk maksimal 1MB.',
-      scanReceiptFailed: 'Gagal memindai struk.',
-      scanReceiptNoText: 'Teks struk tidak ditemukan.',
-      scanReceiptMissingTotal: 'Total tidak ditemukan, isi manual.',
-      scanReceiptSuccess: 'Struk berhasil dipindai.',
+      receiptCombinedTitle: 'Belanja (gabungan)',
+      receiptAddItem: 'Tambah Item',
+      receiptDefaultItem: 'Belanja',
+      receiptItemsNote: 'Detail item',
+      merchantLabel: 'Toko',
+      merchantPlaceholder: 'Contoh: Indomaret',
+      multiItemLabel: 'Multi item belanja',
+      multiItemHint: 'Gunakan jika satu transaksi berisi banyak item.',
       rateUnavailable: 'Gagal mengambil kurs terbaru, memakai kurs cadangan.',
       incomeBadge: 'Pemasukan',
       expenseBadge: 'Pengeluaran',
@@ -624,6 +663,8 @@ export const useMoneyManager = () => {
       editCategory: 'Edit Category',
       categoryNameLabel: 'Category Name',
       categoryExample: 'Example: Entertainment, Bonus',
+      salaryCategoryLabel: 'Mark as salary',
+      salaryCategoryHint: 'Enable for salary income to show Salary Period.',
       saveCategory: 'Save Category',
       deleteCategory: 'Delete Category',
       deleteWarning: 'This action cannot be undone.',
@@ -657,6 +698,8 @@ export const useMoneyManager = () => {
       walletIn: 'To Wallet',
       amount: 'Amount',
       note: 'Note',
+      incomePeriodLabel: 'Salary Period',
+      incomePeriodHint: 'Example: 2025-04 for April salary period.',
       nominal: 'Amount',
       unitPrice: 'Unit Price',
       promo: 'Promo',
@@ -707,6 +750,9 @@ export const useMoneyManager = () => {
       avatarHint: 'PNG/JPG, max 512KB.',
       changePassword: 'Change Password',
       dataSecurity: 'Data & Security',
+      reportingPeriod: 'Reporting Period',
+      reportingStartDayLabel: 'Start day',
+      reportingStartDayHint: 'If date is missing, use the last day of month.',
       exportData: 'Export Data (CSV)',
       privacyPolicy: 'Privacy Policy',
       helpCenter: 'Help Center',
@@ -718,16 +764,14 @@ export const useMoneyManager = () => {
       offlineSaved: 'Transaction saved offline and will sync when online.',
       offlineNoCache: 'You are offline and no cached data is available.',
       offlineSyncFailed: 'Failed to sync offline transactions. Will retry.',
-      scanReceipt: 'Scan Receipt',
-      scanReceiptHint: 'Upload receipt photo (PNG/JPG).',
-      scanReceiptDisabled: 'OCR is only available online.',
-      scanReceiptLoading: 'Scanning...',
-      scanReceiptUnsupported: 'Receipt must be an image.',
-      scanReceiptTooLarge: 'Receipt size max 1MB.',
-      scanReceiptFailed: 'Failed to scan receipt.',
-      scanReceiptNoText: 'No text found on receipt.',
-      scanReceiptMissingTotal: 'Total not found, fill it manually.',
-      scanReceiptSuccess: 'Receipt scanned.',
+      receiptCombinedTitle: 'Combined items',
+      receiptAddItem: 'Add Item',
+      receiptDefaultItem: 'Shopping',
+      receiptItemsNote: 'Item details',
+      merchantLabel: 'Merchant',
+      merchantPlaceholder: 'Example: Grocery store',
+      multiItemLabel: 'Multiple items',
+      multiItemHint: 'Use this when one transaction includes multiple items.',
       rateUnavailable: 'Unable to fetch latest rates, using fallback.',
       incomeBadge: 'Income',
       expenseBadge: 'Expense',
@@ -781,7 +825,6 @@ export const useMoneyManager = () => {
   const analyticsLoading = useState<boolean>('mm-analyticsLoading', () => false);
   const analyticsTableLoading = useState<boolean>('mm-analyticsTableLoading', () => false);
   const analyticsPageSize = 5;
-  const ocrLoading = useState<boolean>('mm-ocrLoading', () => false);
   const isOnline = useState<boolean>('mm-isOnline', () =>
     process.client ? navigator.onLine : true
   );
@@ -824,9 +867,12 @@ export const useMoneyManager = () => {
     type: 'expense' as TransactionType,
     date: getTodayString(),
     productName: '',
+    merchantName: '',
     category: expenseCategories.value[0]?.id || '',
     quantity: 1,
     pricePerItem: '',
+    multiItemMode: false,
+    manualItems: [] as ManualItem[],
     hasPromo: false,
     promoType: 'percent',
     promoValue: '',
@@ -835,6 +881,7 @@ export const useMoneyManager = () => {
     sourceWallet: wallets.value[0]?.id || '',
     destWallet: wallets.value[0]?.id || '',
     incomeAmount: '',
+    incomePeriod: getMonthKey(),
     notes: '',
     totalAmount: 0,
   });
@@ -853,6 +900,7 @@ export const useMoneyManager = () => {
     name: '',
     type: 'expense',
     icon: 'fa-tag',
+    isSalary: false,
   }));
 
   const resetTransactionForm = () => {
@@ -892,6 +940,7 @@ export const useMoneyManager = () => {
       return {
         id: tx.id,
         title,
+        merchantName: tx.merchantName ?? null,
         category: tx.category.name,
         categoryId: tx.category.id,
         type: txType,
@@ -902,6 +951,7 @@ export const useMoneyManager = () => {
         wallet: tx.wallet?.name || '-',
         walletId: tx.wallet?.id || null,
         note: tx.note || null,
+        incomePeriod: tx.incomePeriod ?? null,
         quantity: tx.quantity ?? 1,
         pricePerUnit: tx.pricePerUnit ?? null,
         promoType: tx.promoType ?? null,
@@ -936,177 +986,6 @@ export const useMoneyManager = () => {
     if (abs >= 1000) return `${(converted / 1000).toFixed(0)}${isEnglish ? 'K' : 'rb'}`;
     if (preferredCurrency.value === 'USD') return converted.toFixed(2);
     return Math.round(converted).toString();
-  };
-
-  const parseReceiptDate = (lines: string[]) => {
-    for (const line of lines) {
-      const match = line.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
-      if (!match) continue;
-      const day = Number(match[1]);
-      const month = Number(match[2]);
-      let year = Number(match[3]);
-      if (!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) continue;
-      if (year < 100) year += 2000;
-      if (month < 1 || month > 12 || day < 1 || day > 31) continue;
-      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    }
-    return null;
-  };
-
-  const parseAmountValue = (raw: string) => {
-    const cleaned = raw.replace(/[^\d.,]/g, '');
-    if (!cleaned) return null;
-    const hasDot = cleaned.includes('.');
-    const hasComma = cleaned.includes(',');
-    let normalized = cleaned;
-
-    if (hasDot && hasComma) {
-      const lastComma = cleaned.lastIndexOf(',');
-      const lastDot = cleaned.lastIndexOf('.');
-      if (lastComma > lastDot) {
-        normalized = cleaned.replace(/\./g, '').replace(',', '.');
-      } else {
-        normalized = cleaned.replace(/,/g, '').replace(/\./g, '.');
-      }
-    } else if (hasComma && !hasDot) {
-      normalized = /,\d{2}$/.test(cleaned) ? cleaned.replace(',', '.') : cleaned.replace(/,/g, '');
-    } else if (hasDot && !hasComma) {
-      normalized = /\.\d{2}$/.test(cleaned) ? cleaned : cleaned.replace(/\./g, '');
-    }
-
-    const value = Number(normalized);
-    if (!Number.isFinite(value)) return null;
-    return Math.round(value);
-  };
-
-  const parseReceiptTotal = (lines: string[]) => {
-    const totalKeywords = [
-      'grand total',
-      'total bayar',
-      'total belanja',
-      'total tagihan',
-      'total',
-      'jumlah',
-    ];
-    const avoidKeywords = ['subtotal', 'sub total', 'diskon', 'kembalian', 'change', 'cash', 'tunai'];
-    const amountRegex = /(\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d{2})?/g;
-
-    const candidates: Array<{ value: number; score: number }> = [];
-    lines.forEach((line) => {
-      const matches = line.match(amountRegex);
-      if (!matches) return;
-      const lower = line.toLowerCase();
-      let score = 0;
-      totalKeywords.forEach((kw) => {
-        if (lower.includes(kw)) score += 2;
-      });
-      avoidKeywords.forEach((kw) => {
-        if (lower.includes(kw)) score -= 1;
-      });
-
-      matches.forEach((raw) => {
-        const value = parseAmountValue(raw);
-        if (!value || value <= 0) return;
-        candidates.push({ value, score });
-      });
-    });
-
-    if (candidates.length === 0) return null;
-    candidates.sort((a, b) => b.score - a.score || b.value - a.value);
-    return candidates[0]?.value ?? null;
-  };
-
-  const parseReceiptMerchant = (lines: string[]) => {
-    for (const line of lines) {
-      const lower = line.toLowerCase();
-      if (!/[a-zA-Z]/.test(line)) continue;
-      if (lower.startsWith('tel') || lower.startsWith('hp') || lower.startsWith('phone')) continue;
-      if (lower.includes('npwp') || lower.includes('tax')) continue;
-      return line.trim();
-    }
-    return null;
-  };
-
-  const extractReceiptFields = (text: string) => {
-    const lines = text
-      .split(/\r?\n/)
-      .map((line) => line.replace(/\s+/g, ' ').trim())
-      .filter(Boolean);
-
-    return {
-      merchant: parseReceiptMerchant(lines),
-      date: parseReceiptDate(lines),
-      total: parseReceiptTotal(lines),
-    };
-  };
-
-  const readFileAsDataUrl = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        resolve(typeof reader.result === 'string' ? reader.result : '');
-      };
-      reader.onerror = () => reject(new Error('read-failed'));
-      reader.readAsDataURL(file);
-    });
-
-  const scanReceipt = async (file: File) => {
-    if (!process.client) return;
-    if (ocrLoading.value) return;
-    if (!isOnline.value) {
-      setFlash(t('scanReceiptDisabled'), 'info');
-      return;
-    }
-    if (!file.type.startsWith('image/')) {
-      setFlash(t('scanReceiptUnsupported'), 'error');
-      return;
-    }
-    const maxSize = 1024 * 1024;
-    if (file.size > maxSize) {
-      setFlash(t('scanReceiptTooLarge'), 'error');
-      return;
-    }
-
-    ocrLoading.value = true;
-    try {
-      const image = await readFileAsDataUrl(file);
-      if (!image) {
-        setFlash(t('scanReceiptFailed'), 'error');
-        return;
-      }
-
-      const data = await $fetch<{ text?: string }>('/api/ocr', {
-        method: 'POST',
-        body: { image, language: 'ind' },
-      });
-      const text = String(data?.text || '').trim();
-      if (!text) {
-        setFlash(t('scanReceiptNoText'), 'error');
-        return;
-      }
-
-      const parsed = extractReceiptFields(text);
-      if (parsed.date) {
-        formData.value.date = parsed.date;
-      }
-      if (parsed.merchant && !formData.value.productName.trim()) {
-        formData.value.productName = parsed.merchant;
-      }
-      if (parsed.total) {
-        formData.value.quantity = 1;
-        formData.value.pricePerItem = String(parsed.total);
-        formData.value.totalAmount = parsed.total;
-      } else {
-        setFlash(t('scanReceiptMissingTotal'), 'info');
-        return;
-      }
-
-      setFlash(t('scanReceiptSuccess'), 'success');
-    } catch (error) {
-      setFlash(resolveErrorMessage(error, t('scanReceiptFailed')), 'error');
-    } finally {
-      ocrLoading.value = false;
-    }
   };
 
   const toggleNotifications = () => {
@@ -1344,6 +1223,7 @@ export const useMoneyManager = () => {
     return {
       id: item.id,
       title,
+      merchantName: item.payload.merchantName ?? null,
       category: category?.name || 'Kategori',
       categoryId: item.payload.categoryId,
       type,
@@ -1354,6 +1234,7 @@ export const useMoneyManager = () => {
       wallet: wallet?.name || '-',
       walletId: wallet?.id || null,
       note: item.payload.note ?? null,
+      incomePeriod: item.payload.incomePeriod ?? null,
       quantity: item.payload.quantity ?? 1,
       pricePerUnit: item.payload.pricePerUnit ?? null,
       promoType: item.payload.promoType ?? null,
@@ -1577,6 +1458,7 @@ export const useMoneyManager = () => {
         name: cat.name,
         type: cat.type === 'INCOME' ? 'income' : 'expense',
         icon: cat.icon || 'fa-tag',
+        isSalary: Boolean(cat.isSalary),
       }));
 
       expenseCategories.value = categoryItems.filter((cat) => cat.type === 'expense');
@@ -1701,13 +1583,49 @@ export const useMoneyManager = () => {
     return { year, monthIndex: month - 1 };
   };
 
+  const clampDay = (year: number, monthIndex: number, day: number) => {
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    return Math.min(Math.max(1, day), daysInMonth);
+  };
+
+  const getPeriodRangeForMonth = (year: number, monthIndex: number) => {
+    const safeStartDay = reportingStartDay.value;
+    const start = new Date(year, monthIndex, clampDay(year, monthIndex, safeStartDay));
+    const nextMonthIndex = monthIndex === 11 ? 0 : monthIndex + 1;
+    const nextYear = monthIndex === 11 ? year + 1 : year;
+    const end = new Date(nextYear, nextMonthIndex, clampDay(nextYear, nextMonthIndex, safeStartDay));
+    return { start, end };
+  };
+
+  const getPeriodRangeForDate = (date: Date) => {
+    const safeStartDay = reportingStartDay.value;
+    const year = date.getFullYear();
+    const monthIndex = date.getMonth();
+    const day = date.getDate();
+    const startDayThisMonth = clampDay(year, monthIndex, safeStartDay);
+
+    let startYear = year;
+    let startMonth = monthIndex;
+    if (day < startDayThisMonth) {
+      if (monthIndex === 0) {
+        startYear = year - 1;
+        startMonth = 11;
+      } else {
+        startMonth = monthIndex - 1;
+      }
+    }
+
+    return getPeriodRangeForMonth(startYear, startMonth);
+  };
+
   const getTransactionsForMonth = (monthKey: string) => {
     const parsed = parseMonthKey(monthKey);
     if (!parsed) return [] as TransactionItem[];
+    const range = getPeriodRangeForMonth(parsed.year, parsed.monthIndex);
     return transactions.value.filter((t) => {
       const tDate = new Date(t.date);
       if (Number.isNaN(tDate.getTime())) return false;
-      return tDate.getFullYear() === parsed.year && tDate.getMonth() === parsed.monthIndex;
+      return tDate >= range.start && tDate < range.end;
     });
   };
 
@@ -1719,13 +1637,17 @@ export const useMoneyManager = () => {
   const buildWeeklyChart = (items: TransactionItem[], monthKey: string): WeeklyChart => {
     const parsed = parseMonthKey(monthKey);
     if (!parsed) return { data: [], maxVal: 1, daysInMonth: 0 };
-    const daysInMonth = new Date(parsed.year, parsed.monthIndex + 1, 0).getDate();
+    const range = getPeriodRangeForMonth(parsed.year, parsed.monthIndex);
+    const daysInPeriod = Math.max(
+      1,
+      Math.round((range.end.getTime() - range.start.getTime()) / (1000 * 60 * 60 * 24))
+    );
     const data: WeeklyBucket[] = [];
-    for (let day = 1, index = 0; day <= daysInMonth; day += 7, index += 1) {
+    for (let day = 1, index = 0; day <= daysInPeriod; day += 7, index += 1) {
       data.push({
         week: index + 1,
         startDay: day,
-        endDay: Math.min(day + 6, daysInMonth),
+        endDay: Math.min(day + 6, daysInPeriod),
         income: 0,
         expense: 0,
       });
@@ -1734,8 +1656,10 @@ export const useMoneyManager = () => {
     items.forEach((t) => {
       const tDate = new Date(t.date);
       if (Number.isNaN(tDate.getTime())) return;
-      const day = tDate.getDate();
-      const index = Math.floor((day - 1) / 7);
+      const dayIndex = Math.floor(
+        (tDate.getTime() - range.start.getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1;
+      const index = Math.floor((dayIndex - 1) / 7);
       const bucket = data[index];
       if (!bucket) return;
       if (t.type === 'income') {
@@ -1746,7 +1670,7 @@ export const useMoneyManager = () => {
     });
 
     const maxVal = Math.max(...data.map((d) => Math.max(d.income, d.expense)), 1);
-    return { data, maxVal, daysInMonth };
+    return { data, maxVal, daysInMonth: daysInPeriod };
   };
 
   const applyOfflineAnalyticsOverview = (monthKey: string) => {
@@ -1902,6 +1826,12 @@ export const useMoneyManager = () => {
     updatePreferences({ language });
   };
 
+  const setReportingStartDay = (day: number) => {
+    const normalized = Math.min(31, Math.max(1, Math.floor(Number(day))));
+    if (normalized === reportingStartDay.value) return;
+    updatePreferences({ reportingStartDay: normalized });
+  };
+
   const currencyOptions = computed(() => [
     { value: 'IDR' as CurrencyCode, label: 'IDR (Rupiah)' },
     { value: 'USD' as CurrencyCode, label: preferredLanguage.value === 'en' ? 'USD (US Dollar)' : 'USD (Dolar AS)' },
@@ -1911,6 +1841,10 @@ export const useMoneyManager = () => {
     { value: 'id' as LanguageCode, label: t('indonesian') },
     { value: 'en' as LanguageCode, label: t('english') },
   ]);
+
+  const reportingStartDayOptions = computed(() =>
+    Array.from({ length: 31 }, (_, index) => index + 1)
+  );
 
   const openProfileModal = () => {
     profileForm.value.name = currentUser.value?.name?.trim() || displayName.value;
@@ -2070,6 +2004,7 @@ export const useMoneyManager = () => {
     categoryForm.value.name = '';
     categoryForm.value.type = type;
     categoryForm.value.icon = 'fa-tag';
+    categoryForm.value.isSalary = false;
     editingCategory.value = null;
     showCategoryModal.value = true;
   };
@@ -2079,6 +2014,7 @@ export const useMoneyManager = () => {
     categoryForm.value.name = category.name;
     categoryForm.value.type = category.type;
     categoryForm.value.icon = category.icon || 'fa-tag';
+    categoryForm.value.isSalary = Boolean(category.isSalary);
     showCategoryModal.value = true;
   };
 
@@ -2094,6 +2030,7 @@ export const useMoneyManager = () => {
             name,
             type: categoryForm.value.type === 'expense' ? 'EXPENSE' : 'INCOME',
             icon: categoryForm.value.icon,
+            isSalary: categoryForm.value.type === 'income' ? categoryForm.value.isSalary : false,
           },
         });
       } else {
@@ -2103,12 +2040,13 @@ export const useMoneyManager = () => {
             name,
             type: categoryForm.value.type === 'expense' ? 'EXPENSE' : 'INCOME',
             icon: categoryForm.value.icon,
+            isSalary: categoryForm.value.type === 'income' ? categoryForm.value.isSalary : false,
           },
         });
       }
 
       showCategoryModal.value = false;
-      categoryForm.value = { name: '', type: 'expense', icon: 'fa-tag' };
+      categoryForm.value = { name: '', type: 'expense', icon: 'fa-tag', isSalary: false };
       editingCategory.value = null;
       await refreshData();
     } catch (error) {
@@ -2145,8 +2083,58 @@ export const useMoneyManager = () => {
     }
   };
 
+  const resolveManualItemTotal = (item: ManualItem) => {
+    const qty = Math.max(0, Math.floor(Number(item.qty) || 0));
+    const unitPrice = Math.max(0, Number(item.unitPrice) || 0);
+    const baseTotal = qty * unitPrice;
+    let finalTotal = baseTotal;
+
+    if (item.hasPromo) {
+      const promoType = item.promoType || 'percent';
+      const promoVal = Math.max(0, Number(item.promoValue) || 0);
+      if (promoType === 'percent') {
+        finalTotal = baseTotal - baseTotal * (promoVal / 100);
+      } else if (promoType === 'nominal') {
+        finalTotal = baseTotal - promoVal;
+      } else if (promoType === 'buyXgetY') {
+        const buyX = Math.max(0, Math.floor(Number(item.buyX) || 0));
+        const getY = Math.max(0, Math.floor(Number(item.getY) || 0));
+        const group = buyX + getY;
+        if (buyX > 0 && getY > 0 && group > 0) {
+          const freeItems = Math.floor(qty / group) * getY;
+          const paidQty = Math.max(0, qty - freeItems);
+          finalTotal = paidQty * unitPrice;
+        }
+      }
+    }
+
+    return Math.max(0, Math.round(finalTotal));
+  };
+
+  const resolveManualItemPromoLabel = (item: ManualItem) => {
+    if (!item.hasPromo) return '';
+    const promoType = item.promoType || 'percent';
+    if (promoType === 'percent') {
+      const promoVal = Math.max(0, Number(item.promoValue) || 0);
+      return t('discountPercent', { value: promoVal });
+    }
+    if (promoType === 'nominal') {
+      const promoVal = Math.max(0, Number(item.promoValue) || 0);
+      return t('discountNominal', { value: formatRupiah(promoVal) });
+    }
+    if (promoType === 'buyXgetY') {
+      const buyX = Math.max(0, Math.floor(Number(item.buyX) || 0));
+      const getY = Math.max(0, Math.floor(Number(item.getY) || 0));
+      return t('buyXGetY', { buy: buyX, get: getY });
+    }
+    return '';
+  };
+
   const handleSaveTransaction = async () => {
-    const title = formData.value.productName.trim();
+    const isMultiItemExpense =
+      formData.value.type === 'expense' && Boolean(formData.value.multiItemMode);
+    const rawTitle = formData.value.productName.trim();
+    const title = rawTitle || (isMultiItemExpense ? t('receiptCombinedTitle') : '');
     if (!title) {
       setFlash(t('transactionNameRequired'), 'error');
       return;
@@ -2175,12 +2163,16 @@ export const useMoneyManager = () => {
       }
     }
 
+    const rawMerchantName = String(formData.value.merchantName || '').trim();
+    const merchantName =
+      formData.value.type === 'expense' && rawMerchantName ? rawMerchantName : null;
+
     let promoType: string | null = null;
     let promoValue: number | null = null;
     let promoBuyX: number | null = null;
     let promoGetY: number | null = null;
 
-    if (formData.value.type === 'expense' && formData.value.hasPromo) {
+    if (!isMultiItemExpense && formData.value.type === 'expense' && formData.value.hasPromo) {
       if (formData.value.promoType === 'percent') {
         promoType = 'PERCENT';
         promoValue = parseFloat(String(formData.value.promoValue)) || 0;
@@ -2194,10 +2186,37 @@ export const useMoneyManager = () => {
       }
     }
 
-    const quantity = Math.max(1, Math.floor(parseFloat(String(formData.value.quantity)) || 1));
-    const pricePerUnit = parseFloat(String(formData.value.pricePerItem)) || 0;
+    const quantity = isMultiItemExpense
+      ? 1
+      : Math.max(1, Math.floor(parseFloat(String(formData.value.quantity)) || 1));
+    const rawPricePerUnit = parseFloat(String(formData.value.pricePerItem)) || 0;
 
     const transactionDate = formData.value.date || getTodayString();
+
+    const incomePeriod =
+      formData.value.type === 'income' && formData.value.incomePeriod
+        ? formData.value.incomePeriod
+        : null;
+
+    const manualItemsNote = isMultiItemExpense
+      ? (formData.value.manualItems || [])
+          .map((item) => {
+            const qty = Math.max(1, Number(item.qty) || 1);
+            const total = resolveManualItemTotal(item);
+            if (total <= 0) return null;
+            const name = item.name?.trim() || t('receiptDefaultItem');
+            const promoLabel = resolveManualItemPromoLabel(item);
+            const promoSuffix = promoLabel ? ` (${t('promo')}: ${promoLabel})` : '';
+            return `${qty}x ${name} = ${formatRupiah(total)}${promoSuffix}`;
+          })
+          .filter((line): line is string => Boolean(line))
+          .join('\n')
+      : '';
+    const baseNote = formData.value.notes?.trim() || '';
+    const resolvedNote =
+      baseNote && manualItemsNote
+        ? `${baseNote}\n${manualItemsNote}`
+        : baseNote || manualItemsNote || null;
 
     const payload = {
       categoryId: formData.value.category,
@@ -2205,9 +2224,14 @@ export const useMoneyManager = () => {
       amount: formData.value.totalAmount,
       date: transactionDate,
       productName: title,
-      note: formData.value.notes || null,
+      merchantName,
+      note: resolvedNote,
+      incomePeriod,
       quantity: formData.value.type === 'expense' ? quantity : 1,
-      pricePerUnit: formData.value.type === 'expense' && pricePerUnit > 0 ? pricePerUnit : null,
+      pricePerUnit:
+        formData.value.type === 'expense' && !isMultiItemExpense && rawPricePerUnit > 0
+          ? rawPricePerUnit
+          : null,
       promoType,
       promoValue,
       promoBuyX,
@@ -2344,8 +2368,10 @@ export const useMoneyManager = () => {
   const filteredTransactions = computed(() =>
     transactions.value.filter((t) => {
       const tDate = new Date(t.date);
+      if (Number.isNaN(tDate.getTime())) return false;
       const stats = new Date(statsDate.value);
-      return tDate.getMonth() === stats.getMonth() && tDate.getFullYear() === stats.getFullYear();
+      const range = getPeriodRangeForMonth(stats.getFullYear(), stats.getMonth());
+      return tDate >= range.start && tDate < range.end;
     })
   );
 
@@ -2583,8 +2609,10 @@ export const useMoneyManager = () => {
     darkModeEnabled,
     preferredCurrency,
     preferredLanguage,
+    reportingStartDay,
     currencyOptions,
     languageOptions,
+    reportingStartDayOptions,
     t,
     notifications,
     notificationsHasMore,
@@ -2625,8 +2653,6 @@ export const useMoneyManager = () => {
     formatRupiah,
     formatShortRupiah,
     isOnline,
-    ocrLoading,
-    scanReceipt,
     toggleNotifications,
     markAllNotificationsRead,
     markNotificationRead,
@@ -2641,6 +2667,7 @@ export const useMoneyManager = () => {
     toggleDarkModePreference,
     setCurrencyPreference,
     setLanguagePreference,
+    setReportingStartDay,
     openProfileModal,
     closeProfileModal,
     handleSaveProfile,

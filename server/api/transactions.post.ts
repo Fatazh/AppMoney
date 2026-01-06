@@ -34,12 +34,17 @@ export default defineEventHandler(async (event) => {
   const walletId = body?.walletId ? String(body.walletId) : null;
   const amount = normalizeAmount(body?.amount);
   const productName = String(body?.productName || '').trim();
+  const rawMerchantName = body?.merchantName ? String(body.merchantName).trim() : '';
+  const merchantName = rawMerchantName ? rawMerchantName : null;
   const note = body?.note ? String(body.note).trim() : null;
   const parsedDate = body?.date ? new Date(body.date) : new Date();
   const date = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
   const quantity = Math.max(1, Math.floor(Number(body?.quantity || 1)));
   const rawPrice = body?.pricePerUnit !== undefined ? normalizeAmount(body.pricePerUnit) : null;
   const pricePerUnit = rawPrice !== null && rawPrice > 0 ? rawPrice : null;
+  const rawIncomePeriod =
+    typeof body?.incomePeriod === 'string' ? body.incomePeriod.trim() : null;
+  let incomePeriod: string | null = null;
 
   let promoType: string | null = null;
   let promoValue: number | null = null;
@@ -77,6 +82,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Jumlah transaksi harus lebih dari 0.' });
   }
 
+  if (rawIncomePeriod) {
+    const match = rawIncomePeriod.match(/^(\d{4})-(\d{2})$/);
+    if (!match) {
+      throw createError({ statusCode: 400, statusMessage: 'Periode gaji tidak valid.' });
+    }
+    const month = Number(match[2]);
+    if (!Number.isFinite(month) || month < 1 || month > 12) {
+      throw createError({ statusCode: 400, statusMessage: 'Periode gaji tidak valid.' });
+    }
+    incomePeriod = rawIncomePeriod;
+  }
+
   const resolvedAmount = amount;
   const amountCents = toCents(resolvedAmount);
 
@@ -97,6 +114,7 @@ export default defineEventHandler(async (event) => {
       }
 
       const isExpense = category.type === 'EXPENSE';
+      const resolvedIncomePeriod = !isExpense && category.isSalary ? incomePeriod : null;
       let nextBalanceCents: number | null = null;
 
       if (isExpense) {
@@ -127,6 +145,8 @@ export default defineEventHandler(async (event) => {
           date,
           note,
           productName,
+          merchantName,
+          incomePeriod: resolvedIncomePeriod,
           categoryId: category.id,
           userId: user.id,
           quantity,

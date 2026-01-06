@@ -68,6 +68,7 @@ const selectedTransaction = ref<{
   promoValue: number | null;
   promoBuyX: number | null;
   promoGetY: number | null;
+  incomePeriod?: string | null;
   wallet: string;
 } | null>(null);
 

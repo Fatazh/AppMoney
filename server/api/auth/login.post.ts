@@ -28,6 +28,7 @@ export default defineEventHandler(async (event) => {
       darkMode: user.darkMode,
       currency: user.currency,
       language: user.language,
+      reportingStartDay: user.reportingStartDay,
     },
   };
 });

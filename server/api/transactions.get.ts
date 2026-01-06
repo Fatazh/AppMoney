@@ -1,8 +1,9 @@
 import { getQuery } from 'h3';
 import { prisma } from '../utils/prisma';
 import { requireUser } from '../utils/auth';
+import { getReportingRangeForMonth, normalizeStartDay } from '../utils/reporting';
 
-const parseMonthRange = (value?: string) => {
+const parseMonthParam = (value?: string) => {
   if (!value) return null;
   const [yearText, monthText] = value.split('-');
   const year = Number(yearText);
@@ -10,9 +11,7 @@ const parseMonthRange = (value?: string) => {
   if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
     return null;
   }
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 1);
-  return { start, end };
+  return { year, monthIndex: month - 1 };
 };
 
 export default defineEventHandler(async (event) => {
@@ -27,10 +26,13 @@ export default defineEventHandler(async (event) => {
     : 5;
 
   const monthParam = typeof query.month === 'string' ? query.month : undefined;
-  const range = parseMonthRange(monthParam);
+  const range = parseMonthParam(monthParam);
+  const startDay = normalizeStartDay(user.reportingStartDay);
 
-  const where = range
-    ? { userId: user.id, date: { gte: range.start, lt: range.end } }
+  const period = range ? getReportingRangeForMonth(range.year, range.monthIndex, startDay) : null;
+
+  const where = period
+    ? { userId: user.id, date: { gte: period.start, lt: period.end } }
     : { userId: user.id };
 
   const [transactions, total] = await prisma.$transaction([
@@ -42,7 +44,9 @@ export default defineEventHandler(async (event) => {
         date: true,
         createdAt: true,
         note: true,
+        incomePeriod: true,
         productName: true,
+        merchantName: true,
         quantity: true,
         pricePerUnit: true,
         promoType: true,
@@ -69,7 +73,9 @@ export default defineEventHandler(async (event) => {
       date: tx.date.toISOString().split('T')[0],
       createdAt: tx.createdAt.toISOString(),
       productName: tx.productName,
+      merchantName: tx.merchantName ?? null,
       note: tx.note,
+      incomePeriod: tx.incomePeriod,
       quantity: tx.quantity,
       pricePerUnit: tx.pricePerUnit ? Number(tx.pricePerUnit) : null,
       promoType: tx.promoType,

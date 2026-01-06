@@ -53,6 +53,7 @@ export default defineEventHandler(async (event) => {
       darkMode: true,
       currency: true,
       language: true,
+      reportingStartDay: true,
     },
   });
 
@@ -71,6 +72,7 @@ export default defineEventHandler(async (event) => {
         name,
         type: 'INCOME',
         icon: categoryIcons[name] || 'fa-tag',
+        isSalary: name === 'Gaji',
         userId: user.id,
       })),
       skipDuplicates: true,

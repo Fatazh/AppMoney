@@ -47,6 +47,7 @@ export default defineEventHandler(async (event) => {
       darkMode: true,
       currency: true,
       language: true,
+      reportingStartDay: true,
     },
   });
 
