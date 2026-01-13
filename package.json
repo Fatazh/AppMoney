@@ -3,12 +3,12 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "nuxt build",
+    "build": "prisma generate && nuxt build",
     "start": "node .output/server/index.mjs",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "prisma generate && node scripts/prisma-link.mjs && nuxt prepare"
+    "postinstall": "node scripts/prisma-link.mjs && nuxt prepare"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.1.0",

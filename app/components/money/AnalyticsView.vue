@@ -77,22 +77,23 @@ const goNextPage = () => {
   void fetchAnalyticsTransactions(monthInputValue.value, analyticsPage.value + 1);
 };
 
-  const selectedTransaction = ref<{
-    id: string;
-    title: string;
-    category: string;
-    type: 'expense' | 'income';
-    date: string;
-    amount: number;
-    note: string | null;
-    pricePerUnit: number | null;
-    promoType: string | null;
-    promoValue: number | null;
-    promoBuyX: number | null;
-    promoGetY: number | null;
-    incomePeriod?: string | null;
-    wallet: string;
-  } | null>(null);
+const selectedTransaction = ref<{
+  id: string;
+  title: string;
+  category: string;
+  type: 'expense' | 'income';
+  date: string;
+  amount: number;
+  note: string | null;
+  pricePerUnit: number | null;
+  promoType: string | null;
+  promoValue: number | null;
+  promoBuyX: number | null;
+  promoGetY: number | null;
+  shoppingType?: string | null;
+  incomePeriod?: string | null;
+  wallet: string;
+} | null>(null);
 
 const openTransactionDetail = (transaction: typeof selectedTransaction.value) => {
   if (!transaction) return;
@@ -124,6 +125,9 @@ const formatSatuan = (transaction: typeof selectedTransaction.value) => {
 
 const formatNote = (transaction: typeof selectedTransaction.value) =>
   transaction?.note?.trim() ? transaction.note : '-';
+
+const formatShoppingType = (transaction: typeof selectedTransaction.value) =>
+  transaction?.shoppingType?.trim() ? transaction.shoppingType : null;
 
 const scrollToDetail = () => {
   if (!detailRef.value) return;
@@ -359,35 +363,35 @@ watch(
               </tr>
               <template v-else>
                 <tr
-                  v-for="t in pagedTransactions"
-                  :key="t.id"
+                  v-for="tx in pagedTransactions"
+                  :key="tx.id"
                   class="border-b border-gray-100 last:border-b-0 cursor-pointer hover:bg-gray-50"
-                  @click="openTransactionDetail(t)"
+                  @click="openTransactionDetail(tx)"
                 >
-                  <td class="py-3 px-3 text-xs text-gray-500 whitespace-nowrap">{{ t.date }}</td>
+                  <td class="py-3 px-3 text-xs text-gray-500 whitespace-nowrap">{{ tx.date }}</td>
                   <td class="py-3 px-3">
                     <div class="flex items-center gap-2">
                       <div
                         class="w-7 h-7 rounded-lg flex items-center justify-center"
-                        :class="t.type === 'income' ? 'bg-lime-50 text-lime-600' : 'bg-slate-50 text-slate-900'"
+                        :class="tx.type === 'income' ? 'bg-lime-50 text-lime-600' : 'bg-slate-50 text-slate-900'"
                       >
-                        <i class="fas text-[11px]" :class="t.icon"></i>
+                        <i class="fas text-[11px]" :class="tx.icon"></i>
                       </div>
-                      <span class="text-sm font-semibold text-slate-900 truncate">{{ t.title }}</span>
+                      <span class="text-sm font-semibold text-slate-900 truncate">{{ tx.title }}</span>
                     </div>
                   </td>
-                  <td class="py-3 px-3 text-xs text-gray-500">{{ t.category }}</td>
+                  <td class="py-3 px-3 text-xs text-gray-500">{{ tx.category }}</td>
                   <td class="py-3 px-3">
                       <span
                         class="text-[10px] font-bold px-2.5 py-1 rounded-full"
-                        :class="t.type === 'income' ? 'bg-lime-50 text-lime-700' : 'bg-red-50 text-red-600'"
+                        :class="tx.type === 'income' ? 'bg-lime-50 text-lime-700' : 'bg-red-50 text-red-600'"
                       >
-                        {{ t.type === 'income' ? t('incomeBadge') : t('expenseBadge') }}
+                        {{ tx.type === 'income' ? t('incomeBadge') : t('expenseBadge') }}
                       </span>
                     </td>
-                  <td class="py-3 px-3 text-xs text-gray-500">{{ t.wallet || '-' }}</td>
-                  <td class="py-3 px-3 text-right font-bold" :class="t.type === 'income' ? 'text-lime-600' : 'text-slate-900'">
-                    {{ t.type === 'income' ? '+' : '-' }}{{ formatRupiah(Math.abs(t.amount)) }}
+                  <td class="py-3 px-3 text-xs text-gray-500">{{ tx.wallet || '-' }}</td>
+                  <td class="py-3 px-3 text-right font-bold" :class="tx.type === 'income' ? 'text-lime-600' : 'text-slate-900'">
+                    {{ tx.type === 'income' ? '+' : '-' }}{{ formatRupiah(Math.abs(tx.amount)) }}
                   </td>
                 </tr>
               </template>
@@ -533,6 +537,12 @@ watch(
               <div class="flex justify-between items-center">
                 <span class="text-xs text-gray-400">{{ t('note') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ formatNote(selectedTransaction) }}</span>
+              </div>
+              <div v-if="formatShoppingType(selectedTransaction)" class="flex justify-between items-center">
+                <span class="text-xs text-gray-400">{{ t('shoppingTypeLabel') }}</span>
+                <span class="text-sm font-semibold text-slate-700 text-right">
+                  {{ formatShoppingType(selectedTransaction) }}
+                </span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-xs text-gray-400">{{ t('nominal') }}</span>

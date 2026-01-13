@@ -51,6 +51,7 @@ interface TransactionItem {
   id: string;
   title: string;
   merchantName?: string | null;
+  shoppingType?: string | null;
   category: string;
   categoryId: string;
   type: TransactionType;
@@ -170,6 +171,7 @@ interface BootstrapPayload {
     createdAt: string;
     productName?: string | null;
     merchantName?: string | null;
+    shoppingType?: string | null;
     note?: string | null;
     incomePeriod?: string | null;
     quantity?: number | null;
@@ -212,6 +214,7 @@ interface OfflineTransactionPayload {
     date: string;
     productName: string;
     merchantName: string | null;
+    shoppingType: string | null;
     note: string | null;
     incomePeriod: string | null;
     quantity: number;
@@ -238,18 +241,6 @@ interface OfflineSession {
   version: number;
   user: UserInfo;
   updatedAt: string;
-}
-
-interface ManualItem {
-  id: string;
-  name: string;
-  qty: number | string;
-  unitPrice: number | string;
-  hasPromo: boolean;
-  promoType: 'percent' | 'nominal' | 'buyXgetY';
-  promoValue: number | string;
-  buyX: number | string;
-  getY: number | string;
 }
 
 const walletTypeMapToUi: Record<DbWalletType, WalletType> = {
@@ -578,13 +569,15 @@ export const useMoneyManager = () => {
       offlineNoCache: 'Anda offline dan belum ada data tersimpan.',
       offlineSyncFailed: 'Gagal sinkron transaksi offline. Akan dicoba lagi.',
       receiptCombinedTitle: 'Belanja (gabungan)',
-      receiptAddItem: 'Tambah Item',
-      receiptDefaultItem: 'Belanja',
-      receiptItemsNote: 'Detail item',
+      receiptAddItem: 'Tambah Transaksi',
+      receiptDefaultItem: 'Transaksi',
+      receiptItemsNote: 'Detail transaksi',
       merchantLabel: 'Toko',
+      shoppingTypeLabel: 'Jenis Belanja',
+      shoppingTypePlaceholder: 'Contoh: Makanan, Bahan pokok',
       merchantPlaceholder: 'Contoh: Indomaret',
-      multiItemLabel: 'Multi item belanja',
-      multiItemHint: 'Gunakan jika satu transaksi berisi banyak item.',
+      multiItemLabel: 'Multi transaksi',
+      multiItemHint: 'Simpan beberapa transaksi sekaligus.',
       rateUnavailable: 'Gagal mengambil kurs terbaru, memakai kurs cadangan.',
       incomeBadge: 'Pemasukan',
       expenseBadge: 'Pengeluaran',
@@ -765,13 +758,15 @@ export const useMoneyManager = () => {
       offlineNoCache: 'You are offline and no cached data is available.',
       offlineSyncFailed: 'Failed to sync offline transactions. Will retry.',
       receiptCombinedTitle: 'Combined items',
-      receiptAddItem: 'Add Item',
-      receiptDefaultItem: 'Shopping',
-      receiptItemsNote: 'Item details',
+      receiptAddItem: 'Add Transaction',
+      receiptDefaultItem: 'Transaction',
+      receiptItemsNote: 'Transaction details',
       merchantLabel: 'Merchant',
+      shoppingTypeLabel: 'Shopping Type',
+      shoppingTypePlaceholder: 'Example: Groceries, Snacks',
       merchantPlaceholder: 'Example: Grocery store',
-      multiItemLabel: 'Multiple items',
-      multiItemHint: 'Use this when one transaction includes multiple items.',
+      multiItemLabel: 'Multiple transactions',
+      multiItemHint: 'Save several transactions at once.',
       rateUnavailable: 'Unable to fetch latest rates, using fallback.',
       incomeBadge: 'Income',
       expenseBadge: 'Expense',
@@ -868,11 +863,10 @@ export const useMoneyManager = () => {
     date: getTodayString(),
     productName: '',
     merchantName: '',
+    shoppingType: '',
     category: expenseCategories.value[0]?.id || '',
     quantity: 1,
     pricePerItem: '',
-    multiItemMode: false,
-    manualItems: [] as ManualItem[],
     hasPromo: false,
     promoType: 'percent',
     promoValue: '',
@@ -941,6 +935,7 @@ export const useMoneyManager = () => {
         id: tx.id,
         title,
         merchantName: tx.merchantName ?? null,
+        shoppingType: tx.shoppingType ?? null,
         category: tx.category.name,
         categoryId: tx.category.id,
         type: txType,
@@ -1224,6 +1219,7 @@ export const useMoneyManager = () => {
       id: item.id,
       title,
       merchantName: item.payload.merchantName ?? null,
+      shoppingType: item.payload.shoppingType ?? null,
       category: category?.name || 'Kategori',
       categoryId: item.payload.categoryId,
       type,
@@ -2083,59 +2079,9 @@ export const useMoneyManager = () => {
     }
   };
 
-  const resolveManualItemTotal = (item: ManualItem) => {
-    const qty = Math.max(0, Math.floor(Number(item.qty) || 0));
-    const unitPrice = Math.max(0, Number(item.unitPrice) || 0);
-    const baseTotal = qty * unitPrice;
-    let finalTotal = baseTotal;
-
-    if (item.hasPromo) {
-      const promoType = item.promoType || 'percent';
-      const promoVal = Math.max(0, Number(item.promoValue) || 0);
-      if (promoType === 'percent') {
-        finalTotal = baseTotal - baseTotal * (promoVal / 100);
-      } else if (promoType === 'nominal') {
-        finalTotal = baseTotal - promoVal;
-      } else if (promoType === 'buyXgetY') {
-        const buyX = Math.max(0, Math.floor(Number(item.buyX) || 0));
-        const getY = Math.max(0, Math.floor(Number(item.getY) || 0));
-        const group = buyX + getY;
-        if (buyX > 0 && getY > 0 && group > 0) {
-          const freeItems = Math.floor(qty / group) * getY;
-          const paidQty = Math.max(0, qty - freeItems);
-          finalTotal = paidQty * unitPrice;
-        }
-      }
-    }
-
-    return Math.max(0, Math.round(finalTotal));
-  };
-
-  const resolveManualItemPromoLabel = (item: ManualItem) => {
-    if (!item.hasPromo) return '';
-    const promoType = item.promoType || 'percent';
-    if (promoType === 'percent') {
-      const promoVal = Math.max(0, Number(item.promoValue) || 0);
-      return t('discountPercent', { value: promoVal });
-    }
-    if (promoType === 'nominal') {
-      const promoVal = Math.max(0, Number(item.promoValue) || 0);
-      return t('discountNominal', { value: formatRupiah(promoVal) });
-    }
-    if (promoType === 'buyXgetY') {
-      const buyX = Math.max(0, Math.floor(Number(item.buyX) || 0));
-      const getY = Math.max(0, Math.floor(Number(item.getY) || 0));
-      return t('buyXGetY', { buy: buyX, get: getY });
-    }
-    return '';
-  };
-
   const handleSaveTransaction = async () => {
-    const isMultiItemExpense =
-      formData.value.type === 'expense' && Boolean(formData.value.multiItemMode);
     const rawTitle = formData.value.productName.trim();
-    const title = rawTitle || (isMultiItemExpense ? t('receiptCombinedTitle') : '');
-    if (!title) {
+    if (!rawTitle) {
       setFlash(t('transactionNameRequired'), 'error');
       return;
     }
@@ -2144,6 +2090,35 @@ export const useMoneyManager = () => {
       return;
     }
 
+    const transactionDate = formData.value.date || getTodayString();
+
+    const incomePeriod =
+      formData.value.type === 'income' && formData.value.incomePeriod
+        ? formData.value.incomePeriod
+        : null;
+
+    const baseNote = formData.value.notes?.trim() || '';
+    const resolvedNote = baseNote || null;
+
+    const enqueueOfflinePayloads = (
+      items: OfflineTransactionPayload['payload'][]
+    ) => {
+      const queue = loadOfflineQueue();
+      const nowIso = new Date().toISOString();
+      const offlineItems = items.map((item) => ({
+        id: `offline-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        createdAt: nowIso,
+        payload: item,
+      }));
+      saveOfflineQueue([...queue, ...offlineItems]);
+      mergePendingTransactions(offlineItems);
+      persistOfflineCache();
+      showAddModal.value = false;
+      resetTransactionForm();
+      setFlash(t('offlineSaved'), 'info');
+    };
+
+    const title = rawTitle;
     const walletId =
       formData.value.type === 'expense' ? formData.value.sourceWallet : formData.value.destWallet;
 
@@ -2163,16 +2138,24 @@ export const useMoneyManager = () => {
       }
     }
 
+    const isExpense = formData.value.type === 'expense';
     const rawMerchantName = String(formData.value.merchantName || '').trim();
-    const merchantName =
-      formData.value.type === 'expense' && rawMerchantName ? rawMerchantName : null;
+    const merchantName = isExpense && rawMerchantName ? rawMerchantName : null;
+    const selectedCategory = isExpense
+      ? expenseCategories.value.find((cat) => cat.id === formData.value.category)
+      : null;
+    const isShoppingCategory = ['belanja', 'shopping'].includes(
+      selectedCategory?.name?.trim().toLowerCase() || ''
+    );
+    const rawShoppingType = String(formData.value.shoppingType || '').trim();
+    const shoppingType = isExpense && isShoppingCategory && rawShoppingType ? rawShoppingType : null;
 
     let promoType: string | null = null;
     let promoValue: number | null = null;
     let promoBuyX: number | null = null;
     let promoGetY: number | null = null;
 
-    if (!isMultiItemExpense && formData.value.type === 'expense' && formData.value.hasPromo) {
+    if (formData.value.type === 'expense' && formData.value.hasPromo) {
       if (formData.value.promoType === 'percent') {
         promoType = 'PERCENT';
         promoValue = parseFloat(String(formData.value.promoValue)) || 0;
@@ -2186,37 +2169,8 @@ export const useMoneyManager = () => {
       }
     }
 
-    const quantity = isMultiItemExpense
-      ? 1
-      : Math.max(1, Math.floor(parseFloat(String(formData.value.quantity)) || 1));
+    const quantity = Math.max(1, Math.floor(parseFloat(String(formData.value.quantity)) || 1));
     const rawPricePerUnit = parseFloat(String(formData.value.pricePerItem)) || 0;
-
-    const transactionDate = formData.value.date || getTodayString();
-
-    const incomePeriod =
-      formData.value.type === 'income' && formData.value.incomePeriod
-        ? formData.value.incomePeriod
-        : null;
-
-    const manualItemsNote = isMultiItemExpense
-      ? (formData.value.manualItems || [])
-          .map((item) => {
-            const qty = Math.max(1, Number(item.qty) || 1);
-            const total = resolveManualItemTotal(item);
-            if (total <= 0) return null;
-            const name = item.name?.trim() || t('receiptDefaultItem');
-            const promoLabel = resolveManualItemPromoLabel(item);
-            const promoSuffix = promoLabel ? ` (${t('promo')}: ${promoLabel})` : '';
-            return `${qty}x ${name} = ${formatRupiah(total)}${promoSuffix}`;
-          })
-          .filter((line): line is string => Boolean(line))
-          .join('\n')
-      : '';
-    const baseNote = formData.value.notes?.trim() || '';
-    const resolvedNote =
-      baseNote && manualItemsNote
-        ? `${baseNote}\n${manualItemsNote}`
-        : baseNote || manualItemsNote || null;
 
     const payload = {
       categoryId: formData.value.category,
@@ -2225,37 +2179,20 @@ export const useMoneyManager = () => {
       date: transactionDate,
       productName: title,
       merchantName,
+      shoppingType,
       note: resolvedNote,
       incomePeriod,
       quantity: formData.value.type === 'expense' ? quantity : 1,
       pricePerUnit:
-        formData.value.type === 'expense' && !isMultiItemExpense && rawPricePerUnit > 0
-          ? rawPricePerUnit
-          : null,
+        formData.value.type === 'expense' && rawPricePerUnit > 0 ? rawPricePerUnit : null,
       promoType,
       promoValue,
       promoBuyX,
       promoGetY,
     };
 
-    const saveOffline = () => {
-      const localId = `offline-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-      const offlineItem: OfflineTransactionPayload = {
-        id: localId,
-        createdAt: new Date().toISOString(),
-        payload,
-      };
-      const queue = loadOfflineQueue();
-      saveOfflineQueue([...queue, offlineItem]);
-      mergePendingTransactions([offlineItem]);
-      persistOfflineCache();
-      showAddModal.value = false;
-      resetTransactionForm();
-      setFlash(t('offlineSaved'), 'info');
-    };
-
     if (isOffline()) {
-      saveOffline();
+      enqueueOfflinePayloads([payload]);
       return;
     }
 
@@ -2271,7 +2208,7 @@ export const useMoneyManager = () => {
       setFlash(t('transactionSaved'), 'success');
     } catch (error) {
       if (isOffline()) {
-        saveOffline();
+        enqueueOfflinePayloads([payload]);
         return;
       }
       setFlash(resolveErrorMessage(error, t('transactionSaveFailed')), 'error');
