@@ -30,6 +30,9 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    externals:{
+      inline: ["prisma", "@prisma/client", '.prisma/client'],
+    },
     esbuild: {
       options: {
         target: "es2022",
