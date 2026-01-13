@@ -57,6 +57,7 @@ model Transaction {
   note        String?
   productName String? // New Field: For Expense product details
   merchantName String? // Store or merchant name for expense
+  shoppingType String? // Optional shopping sub-type for Belanja
   incomePeriod String? // YYYY-MM for income period
 
   categoryId String

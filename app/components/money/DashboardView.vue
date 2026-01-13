@@ -68,6 +68,7 @@ const selectedTransaction = ref<{
   promoValue: number | null;
   promoBuyX: number | null;
   promoGetY: number | null;
+  shoppingType?: string | null;
   incomePeriod?: string | null;
   wallet: string;
 } | null>(null);
@@ -102,6 +103,9 @@ const formatSatuan = (transaction: typeof selectedTransaction.value) => {
 
 const formatNote = (transaction: typeof selectedTransaction.value) =>
   transaction?.note?.trim() ? transaction.note : '-';
+
+const formatShoppingType = (transaction: typeof selectedTransaction.value) =>
+  transaction?.shoppingType?.trim() ? transaction.shoppingType : null;
 
 const goToTransactions = () => {
   router.push({ path: '/analytics', query: { section: 'transactions' } });
@@ -360,6 +364,12 @@ const goToTransactions = () => {
               <div class="flex justify-between items-center">
                 <span class="text-xs text-gray-400">{{ t('note') }}</span>
                 <span class="text-sm font-semibold text-slate-700 text-right">{{ formatNote(selectedTransaction) }}</span>
+              </div>
+              <div v-if="formatShoppingType(selectedTransaction)" class="flex justify-between items-center">
+                <span class="text-xs text-gray-400">{{ t('shoppingTypeLabel') }}</span>
+                <span class="text-sm font-semibold text-slate-700 text-right">
+                  {{ formatShoppingType(selectedTransaction) }}
+                </span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-xs text-gray-400">{{ t('nominal') }}</span>

@@ -36,6 +36,7 @@ export default defineEventHandler(async (event) => {
   const productName = String(body?.productName || '').trim();
   const rawMerchantName = body?.merchantName ? String(body.merchantName).trim() : '';
   const merchantName = rawMerchantName ? rawMerchantName : null;
+  const rawShoppingType = body?.shoppingType ? String(body.shoppingType).trim() : '';
   const note = body?.note ? String(body.note).trim() : null;
   const parsedDate = body?.date ? new Date(body.date) : new Date();
   const date = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
@@ -114,7 +115,12 @@ export default defineEventHandler(async (event) => {
       }
 
       const isExpense = category.type === 'EXPENSE';
+      const isShoppingCategory = ['belanja', 'shopping'].includes(
+        category.name?.trim().toLowerCase() || ''
+      );
       const resolvedIncomePeriod = !isExpense && category.isSalary ? incomePeriod : null;
+      const resolvedShoppingType =
+        isExpense && isShoppingCategory && rawShoppingType ? rawShoppingType : null;
       let nextBalanceCents: number | null = null;
 
       if (isExpense) {
@@ -146,6 +152,7 @@ export default defineEventHandler(async (event) => {
           note,
           productName,
           merchantName,
+          shoppingType: resolvedShoppingType,
           incomePeriod: resolvedIncomePeriod,
           categoryId: category.id,
           userId: user.id,
