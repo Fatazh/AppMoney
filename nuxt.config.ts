@@ -32,17 +32,7 @@ export default defineNuxtConfig({
     },
   },
 
-  nitro: {
-    externals: {
-      //   external: ["prisma", "@prisma/client", '.prisma/client'],
-      inline: [],
-
-      // 2. Pastikan dia dianggap external (tidak di-bundle)
-      external: ["@prisma/client"],
-
-      // 3. INI KUNCINYA: Paksa Nitro untuk "menelusuri" dan membawa folder ini
-      traceInclude: ["node_modules/@prisma/client"],
-    },
+  nitro: {    
     esbuild: {
       options: {
         target: "esnext",
