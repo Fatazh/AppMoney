@@ -33,6 +33,14 @@ export default defineNuxtConfig({
   },
 
   nitro: {    
+    externals: {
+      inline: [
+        "@prisma/client",
+        "@prisma/adapter-pg",
+        "pg",
+        "@prisma/extension-accelerate",
+      ],
+    },
     esbuild: {
       options: {
         target: "esnext",
