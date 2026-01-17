@@ -20,10 +20,12 @@
     "dotenv": "^17.2.3",
     "nuxt": "^4.2.2",
     "pg": "^8.16.3",
-    "prisma": "^7.2.0",
     "vue": "^3.5.25",
     "vue-chartjs": "^5.3.3",
     "vue-router": "^4.6.3",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "prisma": "^7.2.0"
   }
 }
