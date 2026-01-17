@@ -17,7 +17,10 @@ export default defineNuxtConfig({
       meta: [
         { name: "theme-color", content: "#0b1220" },
         { name: "apple-mobile-web-app-capable", content: "yes" },
-        { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+        {
+          name: "apple-mobile-web-app-status-bar-style",
+          content: "black-translucent",
+        },
       ],
     },
   },
@@ -30,14 +33,14 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    // externals:{
-    //   external: ["prisma", "@prisma/client", '.prisma/client'],
-    // },
+    externals: {
+      //   external: ["prisma", "@prisma/client", '.prisma/client'],
+      inline: ["@prisma/client"],
+    },
     esbuild: {
       options: {
-        target: "es2022",
+        target: "esnext",
       },
     },
   },
-
 });
